@@ -1,8 +1,17 @@
 <div align="center">
 
+<a href="https://github.com/nickesc/cia-decrypter-ios/actions/workflows/test.yml"><img alt="Tests workflow status" src="https://img.shields.io/github/actions/workflow/status/nickesc/cia-decrypter-ios/test.yml?branch=main&logo=github&label=Tests&logoColor=white&style=for-the-badge&labelColor=%23505050&color=brightgreen"></a>
+<a href="https://github.com/nickesc/cia-decrypter-ios/actions/workflows/release.yml"><img alt="Release workflow status" src="https://img.shields.io/github/actions/workflow/status/nickesc/cia-decrypter-ios/release.yml?branch=main&logo=github&label=Release&logoColor=white&style=for-the-badge&labelColor=%23505050&color=brightgreen"></a>
+<br>
+<a href="https://altstore.io/source/nickesc.io/cia-decrypter-ios/source.json?app=xyz.batcomputer.ciadecrypter"><img alt="AltStore: Latest version" src="https://img.shields.io/github/v/release/nickesc/cia-decrypter-ios?style=for-the-badge&label=AltStore&labelColor=%2300A99D&color=%23F0F0F0"></a>
+
+<br>
+
 <img src="docs/icon.svg" alt="CIA Decrypter icon" width="112" height="112" />
 
-# CIA Decrypter for iOS
+###### By [nickesc](https://github.com/nickesc)
+
+# `CIA Decrypter for iOS`
 
 </div>
 
