@@ -134,7 +134,7 @@ struct ContentView: View {
         .foregroundStyle(accent ? Color.white : Color.primary)
         .padding(18)
         .frame(width: 100, alignment: .leading)
-        .background(accent ? Color.conversionAccent : Color(uiColor: .tertiarySystemGroupedBackground), in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 18, topTrailingRadius: 5))
+        .background(accent ? Color.conversionAccent : Color(uiColor: .tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var overview: some View {
