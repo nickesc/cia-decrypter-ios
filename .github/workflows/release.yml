@@ -90,3 +90,12 @@ jobs:
           gh release create "$RELEASE_TAG"
           build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png
           --target "$RELEASE_REF" --title "CIA Decrypter for iOS $RELEASE_TAG" --generate-notes
+
+  website:
+    name: Publish AltStore source and website
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

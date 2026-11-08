@@ -1,5 +1,5 @@
 <script>
-  import { appIcon, addSourceURL, releases } from '#lib/product.js';
+  import { appIcon, addSourceURL, downloadURL, releases } from '#lib/product.js';
   import CopySourceButton from '#lib/CopySourceButton.svelte';
 </script>
 
@@ -30,7 +30,7 @@
 
 <aside class="note">
   <h2>Prefer to sideload the IPA?</h2>
-  <p><a href={`${releases}/download/CIADecrypter.ipa`}>Download CIADecrypter.ipa</a> for manual installation with AltStore or LiveContainer. See the <a href={releases}>latest release</a> for release notes.</p>
+  <p><a href={downloadURL}>Download CIADecrypter.ipa</a> for manual installation with AltStore or LiveContainer. See the <a href={releases}>latest release</a> for release notes.</p>
 </aside>
 
 <style>

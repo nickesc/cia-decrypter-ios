@@ -18,3 +18,4 @@ __pycache__/
 *.py[cod]
 node_modules/
 .svelte-kit/
+homepage/static/

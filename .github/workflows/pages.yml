@@ -6,8 +6,10 @@ name: GitHub Pages
     paths:
       - "homepage/**"
       - "docs/icon.svg"
+      - "Scripts/prepare-site.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -36,6 +38,12 @@ jobs:
       - name: Configure GitHub Pages
         id: pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Prepare published AltStore source and downloads
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_URL: https://${{ steps.pages.outputs.host }}${{ steps.pages.outputs.base_path }}
+        run: python3 Scripts/prepare-site.py
       - run: npm ci
       - run: npm run check
       - name: Build static pages
