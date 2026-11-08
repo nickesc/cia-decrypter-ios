@@ -179,8 +179,6 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .disabled(store.isExporting)
             }
-            Text("Completed files stay here until Export All succeeds or you cancel this batch.")
-                .font(.footnote).foregroundStyle(.secondary)
         }
         .padding(20)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
@@ -188,12 +186,9 @@ struct ContentView: View {
 
     private var queue: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("FILES").font(.caption.weight(.semibold)).tracking(1.3)
-                Spacer()
-                Text("One conversion at a time").font(.caption)
-            }
-            .foregroundStyle(.secondary)
+            Text("FILES")
+                .font(.caption.weight(.semibold)).tracking(1.3)
+                .foregroundStyle(.secondary)
             LazyVStack(spacing: 12) {
                 ForEach(store.batch.jobs) { job in
                     JobRow(job: job, busy: store.isExporting) {
@@ -206,10 +201,6 @@ struct ContentView: View {
                         store.cancel(job.id)
                     }
                 }
-            }
-            if !store.completed.isEmpty {
-                Text("For Folium, save to Files, then import from Folium. Share can send a file to compatible apps such as Manic.")
-                    .font(.footnote).foregroundStyle(.secondary).padding(.top, 4)
             }
         }
     }

@@ -41,7 +41,6 @@ final class ConversionStore {
                     FileManager.default.fileExists(atPath: directory.appendingPathComponent(job.id.uuidString).appendingPathComponent(job.outputName).path)
                 }
                 for job in batch.jobs { try? FileManager.default.removeItem(at: outputURL(job).appendingPathExtension("partial")) }
-                if !batch.jobs.isEmpty { notice = "Your batch is saved. Resume queued files or retry interrupted conversions." }
                 persist()
             } catch { alert = "The saved batch could not be read. Existing working files have been kept. \(error.localizedDescription)" }
         }
