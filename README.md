@@ -20,7 +20,7 @@ Choose one or more games, convert on your device, and export to Files for your e
 - **Local keys.** Import AES keys, title seeds, and Boot9 from Files and keep them between sessions.
 - **Background processing.** Continue user-started conversions when iOS grants background time.
 - **Recovery.** Keep queued files and completed results across interruptions. Retry failed files without stopping the rest of the queue.
-- **Safe exports.** Save or share one result, or export completed files to a folder without overwriting existing names.
+- **Safe exports.** Save or share one result or all unsaved results. Folder exports preserve separate files without overwriting existing names.
 - **Large-file support.** Process data in chunks, check free storage, and verify hashes before making an output available.
 
 ## Get started
@@ -51,9 +51,9 @@ The script regenerates the project and writes an unsigned IPA to `build/CIADecry
 1. Open **Keys** and import the files your game needs. Already-decrypted games need no keys.
 2. Tap **Add CIA files** and select one or more base-game `.cia` files. Conversion starts with one file at a time.
 3. Use **Save to Files** or **Share** on any ready result. For Folium, save to Files, then import from within Folium. Use Share for apps that accept `.3ds` files, such as Manic.
-4. When the queue finishes or pauses, **Export** saves one result, or **Export All** saves multiple results as separate `.3ds` files into a chosen folder. After any result has been exported, the button changes to **Export Unsaved** and skips files already saved or shared.
+4. When the queue finishes or pauses, use **Save All** to save separate `.3ds` files into a chosen folder, or **Share All** to send them through the system share sheet. These buttons sit above **Add CIA files**, use **Save**/**Share** for one result, and change to **Save Unsaved**/**Share Unsaved** after any successful export. Both skip files already saved or shared.
 
-Successful exports mark each row **Saved to Files** or **Shared**. Once every remaining file has been exported, the app clears the list and its temporary results automatically, including when you export every file individually. Pending and failed conversions stay available; canceled files do not prevent cleanup. Failed or canceled export dialogs leave unsaved results available for retry. A partially successful Export All marks the files already saved and retries only the unsaved files. **Clear** stops conversions and removes working results, with a confirmation for unexported files.
+Successful exports mark each row **Saved to Files** or **Shared**. Once every remaining file has been exported, the app clears the list and its temporary results automatically, including when you export every file individually. Pending and failed conversions stay available; canceled files do not prevent cleanup. Failed or canceled export dialogs leave unsaved results available for retry. A partially successful Save All marks the files already saved and retries only the unsaved files. Sharing marks the selected results only when the system reports success; this does not confirm that the receiving emulator imported them. **Clear** stops conversions and removes working results, with a confirmation for unexported files.
 
 Keep source files available until conversion finishes. The app leaves original CIAs and imported key files untouched.
 

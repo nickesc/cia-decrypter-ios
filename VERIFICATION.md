@@ -19,4 +19,6 @@ The memory probe is repeatable with `Scripts/check-memory.py`; it uses an extern
 - Core suite: 20 tests pass, including individual and mixed exports, pending/failed work, saved-state persistence, and receipts for partial batch exports.
 - Simulator UI with two synthetic outputs: canceling Save leaves both ready; the first successful save shows a tinted Saved to Files row; saving the final output individually returns to the empty state without Export All.
 - Filesystem checks confirm both destination copies remain, the persisted queue is empty, and the two app-owned result folders are gone.
-- Export All skips results already exported. Shared results use a separate label; unsuccessful share callbacks do not mark a result exported.
+- Save All and Share All skip results already exported. Shared results use a separate label; unsuccessful share callbacks do not mark a result exported.
+- Stacked Save All / Share All / Add CIA files verified in Simulator. Share All shows two synthetic documents; canceling preserves both. After individually saving one file, Save Unsaved / Share Unsaved appear and the share sheet contains only the other file. Completing that share through Save to Files clears the queue automatically. Core tests remain at 20 passing; Simulator build passes.
+- Manic's upstream `ApplicationSceneDelegate.scene(_:openURLContexts:)` accepts multiple file URLs and passes the copied files to its importer. A physical-device multi-file handoff to Manic still needs verification.
