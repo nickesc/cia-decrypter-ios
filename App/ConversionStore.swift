@@ -55,7 +55,6 @@ final class ConversionStore {
 
     var isPaused: Bool { !isRunning && batch.inProgressJobs.contains { $0.status.canResume } }
     var canExportAll: Bool { batch.hasUnexportedResults && !isRunning && !batch.hasQueuedWork && !isExporting }
-    var needsClearConfirmation: Bool { batch.hasUnexportedResults }
     var stoppingJobID: UUID? {
         guard let id = workingJobID, batch.jobs.first(where: { $0.id == id })?.status != .running else { return nil }
         return id

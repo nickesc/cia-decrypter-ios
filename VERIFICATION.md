@@ -32,7 +32,7 @@ The memory probe is repeatable with `Scripts/check-memory.py`; it uses an extern
 - Backgrounding and returning preserves idle history. A fresh launch with only Saved history resets to the initial screen. Original CIAs and destination copies remain untouched.
 - Save All and Share All remain side by side above Add CIA files, with fixed labels for single and mixed results. Physical-device SMB/LiveContainer Redo and emulator handoff still need testing.
 
-## Independent pause, delete, and Clear — November 8, 2026
+## Independent pause, delete, and Clear — November 8, 2026 (Clear interaction superseded below)
 
 - Core suite: 27 tests pass. New coverage checks section membership, pausing all jobs without losing progress, resume after persistence, Clear preserving running/queued/paused jobs, deletion into Finished followed by Redo, and protecting a worker while its files close.
 - Restart recovery recognizes a fully verified final output even if the queue recorded a late pause or interruption, while preserving an explicit deletion request.
@@ -42,3 +42,9 @@ The memory probe is repeatable with `Scripts/check-memory.py`; it uses an extern
 - Simulator Clear confirmed before removing three unsaved results, error history, and deleted history. Filesystem checks showed all finished outputs removed and all 28 remaining paused jobs preserved. Running-job preservation is also covered by the core Clear test.
 - Final UI places labeled Pause All / Resume All in the overview card, keeps Clear in the toolbar, and uses In Progress / Finished sections. Per-file Pause/Resume and X are separate controls; deleted and exported entries have Redo. The app no longer derives list behavior from global cancellation flags.
 - Physical-device background expiration, low-storage pause, and SMB/LiveContainer resume still need testing.
+
+## Inline Clear confirmation — November 8, 2026
+
+- Clear is a small button aligned to the right of the Finished heading. The first tap changes its label to red Confirm?; the second clears the section without a confirmation popup.
+- Simulator with paused, ready, and saved synthetic rows: the first tap kept all three entries and the ready output intact. The second removed both Finished entries and the unsaved working folder while preserving the paused row and partial output.
+- Backgrounding and returning resets Confirm? to Clear. Section membership changes also reset confirmation. The Simulator build passes.

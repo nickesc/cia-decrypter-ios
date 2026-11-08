@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var deletingJob: ConversionJob?
     @State private var export: ExportRequest?
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -51,15 +52,6 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Keys", systemImage: "key") { showingKeys = true }
                 }
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    if !store.batch.finishedJobs.isEmpty {
-                        Button("Clear", role: .destructive) {
-                            if store.needsClearConfirmation { confirmingClear = true }
-                            else { store.clearFinished() }
-                        }
-                        .disabled(store.isExporting)
-                    }
-                }
             }
             .safeAreaInset(edge: .bottom) { actions }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.ciaArchive], allowsMultipleSelection: true) { result in
@@ -89,11 +81,11 @@ struct ContentView: View {
                     } onCancel: { export = nil }
                 }
             }
-            .confirmationDialog("Clear finished entries?", isPresented: $confirmingClear, titleVisibility: .visible) {
-                Button("Clear", role: .destructive) { store.clearFinished() }
-                Button("Keep entries", role: .cancel) {}
-            } message: {
-                Text("This removes finished entries and any converted files you haven’t exported. In-progress conversions and original CIA files stay untouched.")
+            .onChange(of: store.batch.finishedJobs.map(\.id)) {
+                confirmingClear = false
+            }
+            .onChange(of: scenePhase) {
+                if scenePhase != .active { confirmingClear = false }
             }
             .confirmationDialog("Delete converted file?", isPresented: Binding(get: { deletingJob != nil }, set: { if !$0 { deletingJob = nil } }), titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
@@ -194,14 +186,35 @@ struct ContentView: View {
                     .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
             }
             if !store.batch.finishedJobs.isEmpty {
-                jobSection("FINISHED", jobs: store.batch.finishedJobs).padding(.top, 12)
+                jobSection("FINISHED", jobs: store.batch.finishedJobs, showsClear: true).padding(.top, 12)
             }
         }
     }
 
-    private func jobSection(_ title: String, jobs: [ConversionJob]) -> some View {
+    private func jobSection(_ title: String, jobs: [ConversionJob], showsClear: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.caption.weight(.semibold)).tracking(1.3).foregroundStyle(.secondary)
+            HStack {
+                Text(title).font(.caption.weight(.semibold)).tracking(1.3).foregroundStyle(.secondary)
+                Spacer()
+                if showsClear {
+                    Button {
+                        if confirmingClear {
+                            confirmingClear = false
+                            store.clearFinished()
+                        } else { confirmingClear = true }
+                    } label: {
+                        Text(confirmingClear ? "Confirm?" : "Clear")
+                            .frame(minWidth: 60)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                    .foregroundStyle(confirmingClear ? Color.red : Color.secondary)
+                    .frame(minHeight: 44)
+                    .accessibilityHint(confirmingClear ? "Clears finished entries and their working files." : "Tap again to confirm clearing finished entries.")
+                    .disabled(store.isExporting)
+                }
+            }
             LazyVStack(spacing: 12) {
                 ForEach(jobs) { job in
                     JobRow(job: job, busy: store.isExporting || store.stoppingJobID == job.id, stopping: store.stoppingJobID == job.id) {

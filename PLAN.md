@@ -20,8 +20,8 @@ Confirmed November 7, 2026. Build a personal, entirely on-device CIA-to-`.3ds` c
 - Keep the conversion page after exports or Clear, even with no active files. Accumulate Finished history as more CIAs are added. Keep it through backgrounding and relaunches with unfinished or unsaved work; reset on a fresh idle launch. Never clear history just because the app enters the background.
 - Canceled/failed exports retain unsaved results for retry. Sharing counts as exported only when the system reports success.
 - Continue past file failures, including missing keys. Allow retry after fixing the cause.
-- Put a labeled Pause All / Resume All control in the overview card beside progress. Pause All pauses running and queued jobs without deleting progress. Keep Clear in the toolbar. Per-file Pause retains progress; Resume continues that file. X deletes its working files and moves it to Finished with Redo, without stopping other jobs.
-- Clear removes only Finished entries, including unexported results, saved history, errors, and deleted rows. Confirm before removing unexported results. Preserve running, queued, and paused jobs, and protect a worker that is still closing its files.
+- Put a labeled Pause All / Resume All control in the overview card beside progress. Pause All pauses running and queued jobs without deleting progress. Per-file Pause retains progress; Resume continues that file. X deletes its working files and moves it to Finished with Redo, without stopping other jobs.
+- Place a small Clear button at the right of the Finished heading. The first tap changes it to red Confirm?; the second clears Finished entries and their working files, including unexported results, saved history, errors, and deleted rows, without a popup. Reset confirmation if section membership changes or the app leaves the foreground. Preserve running, queued, and paused jobs, and protect a worker that is still closing its files.
 - Pause on low storage while keeping completed and usable partial outputs. Resume after space becomes available.
 
 ## Background work and recovery
