@@ -161,10 +161,15 @@ struct NCCHPlan {
         return result
     }
 
-    func outputHeader(index: Int, baseID: UInt64) -> Data {
+    var decryptedHeader: Data {
         var header = originalHeader
         header[0x18b] = 0
         header[0x18f] = (header[0x18f] & ~0x21) | 4
+        return header
+    }
+
+    func outputHeader(index: Int, baseID: UInt64) -> Data {
+        var header = decryptedHeader
         if index > 0 {
             header.put((baseID & 0x0000ffffffffffff) | (UInt64(index + 4) << 48), at: 0x108, width: 8)
             header.put(baseID, at: 0x118, width: 8)

@@ -7,7 +7,7 @@ struct ConvertCommand {
         do {
             var args = Array(CommandLine.arguments.dropFirst())
             guard args.count >= 2 else {
-                print("Usage: cia-convert INPUT.cia OUTPUT.3ds [--aes PATH] [--seeds PATH] [--boot9 PATH]")
+                print("Usage: cia-convert INPUT.cia OUTPUT.3ds|OUTPUT.cia [--aes PATH] [--seeds PATH] [--boot9 PATH]")
                 return
             }
             let input = URL(fileURLWithPath: args.removeFirst())

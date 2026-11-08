@@ -212,7 +212,6 @@ final class ConversionStore {
     private func runQueue() async {
         while let index = batch.jobs.firstIndex(where: { $0.status == .queued }) {
             let job = batch.jobs[index]
-            let destination = outputURL(job)
             let keys = vault.material
             let control = ConversionControl()
             self.control = control
@@ -230,27 +229,27 @@ final class ConversionStore {
                 break
             }
             do {
+                let kind = try await Task.detached(priority: .userInitiated) {
+                    try Self.withSource(job) { try CIAConverter.titleKind(input: $0) }
+                }.value
+                try control.check()
+                guard let current = batch.jobs.firstIndex(where: { $0.id == job.id }) else { throw ConversionError.cancelled }
+                let outputName = kind.outputName(for: job.inputName)
+                if outputName != job.outputName, FileManager.default.fileExists(atPath: outputURL(job).appendingPathExtension("partial").path) {
+                    throw ConversionError.integrity("The source title type changed. Redo the conversion.")
+                }
+                batch.jobs[current].outputName = outputName
+                guard persist() else { throw ConversionError.lowStorage }
+                let destination = outputURL(batch.jobs[current])
                 let result = try await Task.detached(priority: .userInitiated) {
-                    var stale = false
-                    let source = try URL(resolvingBookmarkData: job.sourceBookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
-                    let access = source.startAccessingSecurityScopedResource()
-                    defer { if access { source.stopAccessingSecurityScopedResource() } }
-                    let coordinator = NSFileCoordinator()
-                    var coordinationError: NSError?
-                    var result: Result<ConversionResult, Error>?
-                    coordinator.coordinate(readingItemAt: source, options: .withoutChanges, error: &coordinationError) { coordinated in
-                        result = Result {
-                            try CIAConverter.convert(input: coordinated, output: destination, keys: keys, control: control, resumable: true) { progress in
-                                Task { @MainActor [weak self] in
-                                    guard let self, self.control === control else { return }
-                                    self.update(job.id, progress: progress)
-                                }
+                    try Self.withSource(job) { coordinated in
+                        try CIAConverter.convert(input: coordinated, output: destination, keys: keys, control: control, resumable: true) { progress in
+                            Task { @MainActor [weak self] in
+                                guard let self, self.control === control else { return }
+                                self.update(job.id, progress: progress)
                             }
                         }
                     }
-                    if let coordinationError { throw coordinationError }
-                    guard let result else { throw ConversionError.invalid("The source could not be opened. Select the CIA again in Files.") }
-                    return try result.get()
                 }.value
                 if let current = batch.jobs.firstIndex(where: { $0.id == job.id }) {
                     if batch.jobs[current].status == .cancelled { removeWorkspace(batch.jobs[current]) }
@@ -288,6 +287,21 @@ final class ConversionStore {
         if let id = backgroundID { BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: id) }
         backgroundID = nil
         if success { notice = nil }
+    }
+
+    nonisolated private static func withSource<T>(_ job: ConversionJob, body: (URL) throws -> T) throws -> T {
+        var stale = false
+        let source = try URL(resolvingBookmarkData: job.sourceBookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
+        let access = source.startAccessingSecurityScopedResource()
+        defer { if access { source.stopAccessingSecurityScopedResource() } }
+        var coordinationError: NSError?
+        var result: Result<T, Error>?
+        NSFileCoordinator().coordinate(readingItemAt: source, options: .withoutChanges, error: &coordinationError) { coordinated in
+            result = Result { try body(coordinated) }
+        }
+        if let coordinationError { throw coordinationError }
+        guard let result else { throw ConversionError.invalid("The source could not be opened. Select the CIA again in Files.") }
+        return try result.get()
     }
 
     private func update(_ id: UUID, progress: ConversionProgress) {

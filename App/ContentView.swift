@@ -114,7 +114,7 @@ struct ContentView: View {
                 Text("Ready to decrypt.")
                     .font(.title2.weight(.bold))
                     .multilineTextAlignment(.center)
-                Text("Convert CIA to 3DS.")
+                Text("Convert games to 3DS. Decrypt updates and DLC to CIA.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }

@@ -30,7 +30,7 @@ public struct ConversionJob: Identifiable, Codable, Sendable {
     public let inputName: String
     public let sourceBookmark: Data
     public let inputBytes: Int64
-    public let outputName: String
+    public var outputName: String
     public var status: JobStatus = .queued
     public var progress: Double = 0
     public var message: String?

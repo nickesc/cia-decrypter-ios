@@ -12,6 +12,7 @@ parser.add_argument("--aes", type=Path)
 parser.add_argument("--boot9", type=Path)
 parser.add_argument("--seeds", type=Path)
 parser.add_argument("--max-rss-mb", type=int, default=128)
+parser.add_argument("--output-extension", choices=["3ds", "cia"], default="3ds")
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 binary = root / ".build/release/cia-convert"
@@ -19,7 +20,7 @@ if not binary.is_file():
     raise SystemExit("Run swift build -c release --product cia-convert first.")
 (root / "build").mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix="memory-check-", dir=root / "build") as working:
-    command = ["/usr/bin/time", "-l", str(binary), str(args.input), str(Path(working) / "output.3ds")]
+    command = ["/usr/bin/time", "-l", str(binary), str(args.input), str(Path(working) / f"output.{args.output_extension}")]
     for name in ["boot9", "aes", "seeds"]:
         path = getattr(args, name)
         if path:

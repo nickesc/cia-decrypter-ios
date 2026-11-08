@@ -15,10 +15,10 @@
 
 </div>
 
-Convert Nintendo 3DS `.cia` files into decrypted `.3ds` files on your iPhone or iPad. Choose one or more games, convert on your device, and save the results to Files for your emulator. Bring your own CIA files and decryption keys.
+Convert Nintendo 3DS `.cia` files into decrypted `.3ds` files on your iPhone or iPad (or decrypted `.cia` files for updates and DLC). Choose one or more games, convert on your device, and save the results to Files for your emulator. Requires your own `.cia` files and decryption keys.
 
 <a href="https://altstore.io/source/nickesc.io/cia-decrypter-ios/source.json?app=xyz.batcomputer.ciadecrypter">
-  <img src="docs/altstore-badge.svg" alt="Download on AltStore" width="245" />
+  <img src="docs/altstore-badge.svg" alt="Install with AltStore" width="245" />
 </a>
 
 ## Install
@@ -42,19 +42,19 @@ For manual sideloading with AltStore or LiveContainer, download `CIADecrypter.ip
 1. Open **Keys** and import the [key files](#key-files) your game needs.
 2. Tap **Add CIA files** and select one or more `.cia` files.
 3. Use **Save to Files** or **Share** on a ready result. When the queue finishes or pauses, use **Save All** or **Share All** to export all remaining results.
-4. Import the `.3ds` files into your emulator.
+4. Import base-game `.3ds` files into your emulator. Install update and DLC `.decrypted.cia` files through an emulator that supports CIA installation, such as Manic EMU. Use the matching game and region.
 
-For now, use **base-game CIAs** only. The app does not yet support updates, DLC, or system titles.
+The app detects base games, updates, and DLC from their title metadata. Updates and DLC are exported as decrypted `.cia` files. System titles remain unsupported.
 
 ## Key files
 
 Import files from **Keys** once and reuse them for future conversions. You can replace or remove them from the same screen.
 
-| File           | Purpose                                                                                   |
-| -------------- | ----------------------------------------------------------------------------------------- |
-| `aes_keys.txt` | Keys for encrypted games.                                                                 |
-| `seeddb.bin`   | Title seeds required by some games.                                                       |
-| `boot9.bin`    | Keys from your full or protected retail Boot9 dump. Some games still need `aes_keys.txt`. |
+| File           | Purpose                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| `aes_keys.txt` | Keys for encrypted games.                                                                           |
+| `seeddb.bin`   | Title seeds required by some games.                                                                 |
+| `boot9.bin`    | Optional. Keys from your full or protected retail Boot9 dump. Some games still need `aes_keys.txt`. |
 
 If a conversion reports a missing key or seed, import the required file, then tap **Redo**.
 
@@ -63,7 +63,7 @@ If a conversion reports a missing key or seed, import the required file, then ta
 | Situation                            | Next step                                                                         |
 | ------------------------------------ | --------------------------------------------------------------------------------- |
 | Low storage                          | Free space, then resume. Save ready results to free up the app's working storage. |
-| Missing keys or a failed file        | Fix the reported cause and tap **Redo**. Other files can continue.                |
+| Missing keys or a failed file        | Fix the reported cause and tap **Redo**.                                          |
 | Paused or interrupted conversion     | Reopen the app and resume.                                                        |
 | Source moved or Files access expired | Select the CIA again through Files.                                               |
 

@@ -1,6 +1,7 @@
 import Foundation
 
 struct CIAContent {
+    let record: Int
     let index: Int
     let offset: UInt64
     let size: UInt64
@@ -10,9 +11,15 @@ struct CIAContent {
 
 struct CIAArchive {
     let titleID: UInt64
+    let kind: CIATitleKind
     let saveSize: UInt64
     let contents: [CIAContent]
     let titleKey: Data?
+    let tmdOffset: UInt64
+    let tmdBody: Int
+    let contentOffset: UInt64
+    let contentEnd: UInt64
+    let tmd: Data
 
     init(file: BinaryFile, keys: KeyMaterial) throws {
         let header = try file.read(0, 0x2020)
@@ -23,22 +30,22 @@ struct CIAArchive {
         let metaSize = try header.number(20, 4)
         let contentSize = try header.number(24, 8)
         let ticketOffset = aligned(0x2020) + aligned(certSize)
-        let tmdOffset = ticketOffset + aligned(ticketSize)
-        let contentOffset = tmdOffset + aligned(tmdSize)
+        tmdOffset = ticketOffset + aligned(ticketSize)
+        contentOffset = tmdOffset + aligned(tmdSize)
         guard contentOffset <= file.size, contentSize <= file.size - contentOffset,
               metaSize <= file.size - contentOffset - contentSize,
+              contentOffset <= 8 * 1024 * 1024,
               tmdSize >= 0xa44, tmdSize <= 4 * 1024 * 1024, ticketSize <= 1024 * 1024 else {
             throw ConversionError.invalid("CIA sections are missing or extend beyond the file.")
         }
-        let tmd = try file.read(tmdOffset, Int(tmdSize))
+        tmd = try file.read(tmdOffset, Int(tmdSize))
         let body = try Self.signatureBody(tmd)
+        tmdBody = body
         titleID = try tmd.number(body + 0x4c, 8, bigEndian: true)
-        guard (titleID >> 32) == 0x00040000 else {
-            throw ConversionError.unsupported("This title is an update, DLC, system title, or another unsupported package.")
-        }
+        kind = try CIATitleKind(titleID: titleID)
         saveSize = try tmd.number(body + 0x5a, 4)
         let count = Int(try tmd.number(body + 0x9e, 2, bigEndian: true))
-        guard count > 0, count <= 8 else { throw ConversionError.unsupported("This application has an unsupported content count.") }
+        guard count > 0, kind != .game || count <= 8 else { throw ConversionError.unsupported("This application has an unsupported content count.") }
         let chunksOffset = body + 0x9c4
         let chunkBytes = try tmd.bytes(chunksOffset, count * 0x30)
         let infoBytes = try tmd.bytes(body + 0xc4, 0x900)
@@ -67,20 +74,21 @@ struct CIAArchive {
         for record in 0..<count {
             let start = record * 0x30
             let index = Int(try chunkBytes.number(start + 4, 2, bigEndian: true))
-            guard index < 8, found.insert(index).inserted else { throw ConversionError.unsupported("This application has duplicate or unsupported content indices.") }
+            guard (kind != .game || index < 8), found.insert(index).inserted else { throw ConversionError.unsupported("This package has duplicate or unsupported content indices.") }
             if !active.contains(index) { continue }
             let size = try chunkBytes.number(start + 8, 8, bigEndian: true)
             let encrypted = try chunkBytes.number(start + 6, 2, bigEndian: true) & 1 != 0
-            guard size >= 0x200, offset <= file.size, size <= file.size - offset,
+            guard size >= 0x200, offset <= file.size, offset <= contentOffset + contentSize, size <= file.size - offset,
                   size <= contentOffset + contentSize - offset, !encrypted || size.isMultiple(of: 16) else {
                 throw ConversionError.invalid("Invalid content size.")
             }
-            records.append(CIAContent(index: index, offset: offset, size: size, encrypted: encrypted, hash: try chunkBytes.bytes(start + 16, 32)))
+            records.append(CIAContent(record: record, index: index, offset: offset, size: size, encrypted: encrypted, hash: try chunkBytes.bytes(start + 16, 32)))
             offset += size
         }
-        guard !records.isEmpty, records.contains(where: { $0.index == 0 }), Set(records.map(\.index)) == active, offset == contentOffset + contentSize else {
-            throw ConversionError.invalid("The CIA is missing base-game content or has an inconsistent content table.")
+        guard !records.isEmpty, (kind != .game || records.contains(where: { $0.index == 0 })), Set(records.map(\.index)) == active, offset == contentOffset + contentSize else {
+            throw ConversionError.invalid("The CIA has missing content or an inconsistent content table.")
         }
+        contentEnd = offset
         contents = records
         if contents.contains(where: \.encrypted) {
             let ticket = try file.read(ticketOffset, Int(ticketSize))

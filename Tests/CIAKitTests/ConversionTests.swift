@@ -167,7 +167,7 @@ final class ConversionTests: XCTestCase {
             var cia = fixture.cia
             let ticketOffset = aligned(0x2020)
             let tmdOffset = ticketOffset + aligned(0x350)
-            cia.put(0x0004000e01234500, at: Int(tmdOffset) + 0x140 + 0x4c, width: 8, bigEndian: true)
+            cia.put(0x0004001001234500, at: Int(tmdOffset) + 0x140 + 0x4c, width: 8, bigEndian: true)
             let input = root.appendingPathComponent("update.cia")
             try cia.write(to: input)
             XCTAssertThrowsError(try CIAConverter.convert(input: input, output: root.appendingPathComponent("output.3ds"), keys: fixture.keys)) {

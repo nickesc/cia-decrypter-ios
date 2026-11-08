@@ -13,7 +13,7 @@ public enum ConversionError: Error, LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalid(let detail): "Invalid file: \(detail)"
-        case .unsupported(let detail): "\(detail) V1 converts base-game application CIAs."
+        case .unsupported(let detail): detail
         case .missingKey(let detail): "Missing \(detail). Import the required key file in Keys, then retry."
         case .integrity(let detail): "\(detail) Check the input and imported keys, then retry."
         case .lowStorage: "Not enough free space. Free storage, then retry."

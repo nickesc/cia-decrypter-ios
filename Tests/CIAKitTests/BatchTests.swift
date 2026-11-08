@@ -2,6 +2,32 @@ import XCTest
 @testable import CIAKit
 
 final class BatchTests: XCTestCase {
+    func testMixedOutputFormatsSurviveRecoveryAndExportWithoutOverwriting() throws {
+        try withDirectory { root in
+            var batch = completedBatch(count: 2)
+            batch.jobs[0].outputName = CIATitleKind.game.outputName(for: "Game.cia")
+            batch.jobs[1].outputName = CIATitleKind.update.outputName(for: "Game update.cia")
+            batch.jobs[1].status = .running
+            let snapshot = root.appendingPathComponent("queue.json")
+            try batch.save(to: snapshot)
+            var restored = try ConversionBatch.load(from: snapshot)
+            XCTAssertEqual(restored.jobs.map(\.outputName), ["Game.3ds", "Game update.decrypted.cia"])
+            restored.recover { _ in true }
+            XCTAssertEqual(restored.unexportedResults.count, 2)
+            let folder = root.appendingPathComponent("export")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let files = try restored.unexportedResults.map { job in
+                let url = root.appendingPathComponent(job.outputName)
+                try Data(job.outputName.utf8).write(to: url)
+                return ExportFile(source: url, name: job.outputName)
+            }
+            try BatchExporter.export(files, to: folder)
+            for file in files {
+                XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(file.name)), try Data(contentsOf: file.source))
+            }
+        }
+    }
+
     func testStopPreservesProgressAndResumeKeepsItAcrossPersistence() throws {
         try withDirectory { root in
             var batch = completedBatch(count: 4)
