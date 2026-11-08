@@ -10,6 +10,13 @@
 - IPA packaging and metadata checked against the actual app: bundle identifier `com.nickesc.ciadecrypter`, iOS 26 minimum, iPhone/iPad device families, matching version/build/size, continued-processing identifiers, launch configuration, and bundled acknowledgments.
 - Local imported AES values were checked against staged source files; none were present. Key files, firmware archives, game inputs, and converted outputs are ignored by Git and excluded from the app target.
 
-No physical-device or UI runtime checks have been performed. Still verify actual playback in Folium and Manic, device Keychain imports, Files providers, iOS background execution while locked, interruption/retry, and AltStore/LiveContainer installation. The initial private release is for those checks. macOS memory measurements do not establish device-specific memory use.
+Physical-device acceptance checks remain for playback in Folium and Manic, device Keychain imports, remote Files providers, iOS background execution while locked, interruption/retry, and AltStore/LiveContainer installation. macOS memory measurements do not establish device-specific memory use.
 
 The memory probe is repeatable with `Scripts/check-memory.py`; it uses an external local sample and deletes only its own temporary output. See README.md for commands. Game data and imported keys are not part of the test suite or release.
+
+## Export behavior — November 8, 2026
+
+- Core suite: 20 tests pass, including individual and mixed exports, pending/failed work, saved-state persistence, and receipts for partial batch exports.
+- Simulator UI with two synthetic outputs: canceling Save leaves both ready; the first successful save shows a tinted Saved to Files row; saving the final output individually returns to the empty state without Export All.
+- Filesystem checks confirm both destination copies remain, the persisted queue is empty, and the two app-owned result folders are gone.
+- Export All skips results already exported. Shared results use a separate label; unsuccessful share callbacks do not mark a result exported.

@@ -12,11 +12,11 @@ Convert Nintendo 3DS CIA files into decrypted `.3ds` files on your iPhone or iPa
 
 </div>
 
-Choose a game or a batch, convert on your device, and export to Files for your emulator. Bring your own CIA files and keys; the app includes neither and needs no conversion server.
+Choose one or more games, convert on your device, and export to Files for your emulator. Bring your own CIA files and keys; the app includes neither and needs no conversion server.
 
 ## Features
 
-- **Batch conversion.** Queue several games, track progress, and save finished files while the next one converts.
+- **Multiple files.** Queue several games, track progress, and save finished files while the next one converts.
 - **Local keys.** Import AES keys, title seeds, and Boot9 from Files and keep them between sessions.
 - **Background processing.** Continue user-started conversions when iOS grants background time.
 - **Recovery.** Keep queued files and completed results across interruptions. Retry failed files without stopping the rest of the queue.
@@ -51,9 +51,9 @@ The script regenerates the project and writes an unsigned IPA to `build/CIADecry
 1. Open **Keys** and import the files your game needs. Already-decrypted games need no keys.
 2. Tap **Add CIA files** and select one or more base-game `.cia` files. Conversion starts with one file at a time.
 3. Use **Save to Files** or **Share** on any ready result. For Folium, save to Files, then import from within Folium. Use Share for apps that accept `.3ds` files, such as Manic.
-4. When the queue finishes or pauses, tap **Export All** and choose a folder. The app saves separate `.3ds` files and clears the exported results from its working storage.
+4. When the queue finishes or pauses, **Export** saves one result, or **Export All** saves multiple results as separate `.3ds` files into a chosen folder. After any result has been exported, the button changes to **Export Unsaved** and skips files already saved or shared.
 
-Individual saves and shares keep the result in the batch for Export All. Failed or canceled exports keep results for retry; files already copied remain in the destination folder. Canceling a batch removes its working results, with a confirmation for unexported files.
+Successful exports mark each row **Saved to Files** or **Shared**. Once every remaining file has been exported, the app clears the list and its temporary results automatically, including when you export every file individually. Pending and failed conversions stay available; canceled files do not prevent cleanup. Failed or canceled export dialogs leave unsaved results available for retry. A partially successful Export All marks the files already saved and retries only the unsaved files. **Clear** stops conversions and removes working results, with a confirmation for unexported files.
 
 Keep source files available until conversion finishes. The app leaves original CIAs and imported key files untouched.
 
@@ -79,7 +79,7 @@ Supported encryption includes CIA AES-CBC, NCCH AES-CTR methods `0`, `1`, `0x0A`
 
 | Situation | Next step |
 | --- | --- |
-| Low storage | Export completed results or free space, then resume the batch. |
+| Low storage | Free space, then resume. Completed results stay available. |
 | Missing keys or a failed file | Fix the reported cause and tap **Retry**. Other files can continue. |
 | Interrupted conversion | Reopen the app and resume. The interrupted file starts from the beginning. |
 | Source moved or Files access expired | Select the CIA again through Files. |
@@ -134,7 +134,7 @@ Omit unused key arguments. The script checks macOS memory use against a 128 MiB 
 | Path | Contents |
 | --- | --- |
 | `App/` | SwiftUI screens, Keychain storage, Files integration, and background tasks. |
-| `Sources/CIAKit/` | Conversion, key parsing, persistent batches, and export. |
+| `Sources/CIAKit/` | Conversion, key parsing, persistent queues, and export. |
 | `Sources/CCrypto/` | Bridge to Apple's CommonCrypto AES implementation. |
 | `Sources/CIAConvert/` | Command-line converter. |
 | `Tests/` | Swift core tests and Python release-metadata tests. |
