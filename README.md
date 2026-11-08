@@ -68,10 +68,10 @@ If you use LiveContainer and run into background or file-picker issues, try its 
 
 Open `CIADecrypter.xcodeproj` in **Xcode 26 or later**, select your signing team, and run the **CIADecrypter** scheme. To package an unsigned IPA, install [XcodeGen](https://github.com/yonaskolb/XcodeGen) and run `bash Scripts/build-ipa.sh`.
 
-Run `swift test` for the conversion core and `python3 -m unittest discover -s Tests/Python` for release metadata. See [verification notes](VERIFICATION.md) for test results and remaining device checks, and the [release workflow](.github/workflows/release.yml) for IPA and AltStore source publishing.
+Run `swift test` for the conversion core and `python3 -m unittest discover -s Tests/Python` for release metadata. See the [release workflow](.github/workflows/release.yml) for IPA and AltStore source publishing.
 
 </details>
 
 ## License
 
-This project uses the [MIT License](LICENSE).
+This project is licensed under the MIT License -- see the [LICENSE](LICENSE) file for details.
