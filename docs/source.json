@@ -1,0 +1,32 @@
+{
+  "name": "CIA Decrypter for iOS",
+  "subtitle": "On-device CIA conversion",
+  "iconURL": "https://nickesc.github.io/cia-decrypter-ios/icon.png",
+  "website": "https://github.com/nickesc/cia-decrypter-ios",
+  "tintColor": "#DB3340",
+  "apps": [
+    {
+      "name": "CIA Decrypter for iOS",
+      "bundleIdentifier": "com.nickesc.ciadecrypter",
+      "developerName": "Nick Escobar",
+      "localizedDescription": "Convert base-game CIA files into decrypted .3ds files on iPhone and iPad. Includes queued conversions, local key imports, background processing, and export to Files.",
+      "iconURL": "https://nickesc.github.io/cia-decrypter-ios/icon.png",
+      "category": "utilities",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "buildVersion": "1",
+          "date": "2026-11-08T01:41:30+00:00",
+          "downloadURL": "https://github.com/nickesc/cia-decrypter-ios/releases/download/v0.1.0/CIADecrypter.ipa",
+          "size": 385800,
+          "minOSVersion": "26.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      }
+    }
+  ],
+  "news": []
+}
