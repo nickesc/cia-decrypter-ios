@@ -70,6 +70,8 @@ Open `CIADecrypter.xcodeproj` in **Xcode 26 or later**, select your signing team
 
 Run `swift test` for the conversion core and `python3 -m unittest discover -s Tests/Python` for release metadata. See the [release workflow](.github/workflows/release.yml) for IPA and AltStore source publishing.
 
+To release, bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`, run `xcodegen generate`, and push to `main`. The release workflow tests and builds new versions, then publishes the version tag, IPA, and AltStore source. It skips versions that already have a release.
+
 </details>
 
 ## License

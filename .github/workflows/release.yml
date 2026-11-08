@@ -2,12 +2,13 @@ name: Release
 
 "on":
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag to release (for example v0.1.0)
-        required: true
+        description: Optional existing version tag; leave blank to release the selected ref's app version
+        required: false
         type: string
 
 permissions:
@@ -18,25 +19,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version:
+    name: Check app version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      ref: ${{ steps.version.outputs.ref }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+          persist-credentials: false
+      - name: Check for an existing release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+        run: |
+          version="$(ruby -ryaml -e 'puts YAML.load_file("project.yml").fetch("settings").fetch("base").fetch("MARKETING_VERSION")')"
+          bash Scripts/check-release.sh "$version"
+          printf 'ref=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
     uses: ./.github/workflows/test.yml
     with:
-      ref: ${{ inputs.tag || github.ref_name }}
+      ref: ${{ needs.version.outputs.ref }}
 
   release:
     name: Build and publish IPA
-    needs: test
+    needs: [version, test]
     runs-on: macos-26
     timeout-minutes: 25
     permissions:
       contents: write
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ needs.version.outputs.tag }}
+      RELEASE_REF: ${{ needs.version.outputs.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ needs.version.outputs.ref }}
           persist-credentials: false
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -63,4 +89,4 @@ jobs:
         run: >-
           gh release create "$RELEASE_TAG"
           build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png
-          --verify-tag --title "CIA Decrypter for iOS $RELEASE_TAG" --generate-notes
+          --target "$RELEASE_REF" --title "CIA Decrypter for iOS $RELEASE_TAG" --generate-notes
