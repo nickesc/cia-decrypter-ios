@@ -35,6 +35,8 @@ public struct ConversionJob: Identifiable, Codable, Sendable {
     public var exportDestination: ExportDestination?
     public var outputBytes: UInt64?
 
+    public var isSaved: Bool { status == .completed && exported }
+
     public var exportLabel: String? {
         guard status == .completed, exported else { return nil }
         switch exportDestination {
@@ -58,12 +60,12 @@ public struct ConversionBatch: Codable, Sendable {
     public var jobs: [ConversionJob] = []
     public init() {}
     public var completed: [ConversionJob] { jobs.filter { $0.status == .completed } }
+    public var activeJobs: [ConversionJob] { jobs.filter { !$0.isSaved } }
+    public var savedResults: [ConversionJob] { jobs.filter(\.isSaved) }
     public var unexportedResults: [ConversionJob] { completed.filter { !$0.exported } }
     public var hasUnexportedResults: Bool { !unexportedResults.isEmpty }
     public var hasQueuedWork: Bool { jobs.contains { $0.status == .queued } }
-    public var isFullyExported: Bool {
-        !completed.isEmpty && jobs.allSatisfy { $0.status == .cancelled || ($0.status == .completed && $0.exported) }
-    }
+    public var isIdle: Bool { jobs.allSatisfy { $0.status == .cancelled || $0.isSaved } }
 
     public mutating func markExported(_ ids: Set<UUID>, destination: ExportDestination) {
         for index in jobs.indices where ids.contains(jobs[index].id) && jobs[index].status == .completed {
@@ -72,16 +74,25 @@ public struct ConversionBatch: Codable, Sendable {
         }
     }
 
-    public mutating func clearIfFullyExported() -> [ConversionJob] {
-        guard isFullyExported else { return [] }
-        let finished = jobs
-        jobs.removeAll()
-        return finished
+    public mutating func requeue(_ id: UUID) -> Bool {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].isSaved || jobs[index].status.canRetry else { return false }
+        jobs[index].status = .queued
+        jobs[index].progress = 0
+        jobs[index].message = nil
+        jobs[index].exported = false
+        jobs[index].exportDestination = nil
+        jobs[index].outputBytes = nil
+        return true
+    }
+
+    public mutating func resetIdleSession() {
+        if isIdle { jobs.removeAll() }
     }
     public var fraction: Double {
-        guard !jobs.isEmpty else { return 0 }
-        let total = jobs.reduce(0.0) { $0 + Double(max($1.inputBytes, 1)) }
-        return jobs.reduce(0.0) { value, job in
+        let active = activeJobs
+        guard !active.isEmpty else { return savedResults.isEmpty ? 0 : 1 }
+        let total = active.reduce(0.0) { $0 + Double(max($1.inputBytes, 1)) }
+        return active.reduce(0.0) { value, job in
             let fraction = job.status == .queued ? 0 : job.status == .running ? job.progress : 1
             return value + Double(max(job.inputBytes, 1)) * fraction
         } / total

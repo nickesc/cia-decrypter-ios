@@ -12,12 +12,14 @@ Confirmed November 7, 2026. Build a personal, entirely on-device CIA-to-`.3ds` c
 ## Queue and results
 
 - Import one or several CIAs through Files and process one at a time without waiting for export decisions.
-- Show per-file status and progress, overall batch progress, errors, retry, and cancellation. Completed outputs are available while later files convert.
+- Show per-file status and progress, overall queue progress, errors, retry, and cancellation. Completed outputs are available while later files convert.
 - Provide individual Save to Files and Share actions. Use system handoff where supported; Folium can import files saved through Files.
-- Stack Save All and Share All above Add CIA files. Save All writes separate unexported `.3ds` files to a chosen folder; Share All passes them together to the system share sheet. Use Save/Share for one result and Save Unsaved/Share Unsaved after any successful export. Both exclude already exported results. Mark exported results as Saved to Files or Shared and style saved rows distinctly.
-- Updated November 8: clear the queue and temporary outputs once every remaining file has been successfully exported, individually or together. Keep pending/failed conversions; canceled files do not block cleanup. Canceled/failed exports retain unsaved results for retry, and partial folder exports mark each successfully saved file. Sharing counts as exported only when the system reports success. Remove only app-owned working files.
+- Place Save All and Share All side by side in one row above Add CIA files. Keep these labels for any result count. Save All writes separate unexported `.3ds` files to a chosen folder; Share All passes them together to the system share sheet. Both exclude exported results.
+- Updated November 8: after each successful export, persist its receipt, delete only that file's app-owned working folder, and move its row into a subdued Saved section. Show Saved to Files or Shared, with Redo instead of save/share actions. Redo uses the original CIA bookmark to queue a fresh conversion and moves the row back to the active list.
+- Keep the conversion page after exports or Clear, even with no active files. Accumulate Saved history as more CIAs are added. Keep history through backgrounding and relaunches with unfinished or unsaved work; reset it on a fresh launch only when all remaining rows are exported or canceled. Never clear history just because the app enters the background.
+- Canceled/failed exports retain unsaved results for retry, and partial folder exports move each successfully saved file into Saved. Sharing counts as exported only when the system reports success.
 - Continue past file failures, including missing keys. Allow retry after fixing the cause.
-- Allow individual and whole-batch cancellation. Confirm cancellation if it would remove completed, unexported results. Do not offer a separate Discard action.
+- Allow individual cancellation and Clear for the active queue. Keep Saved history when clearing. Confirm if Clear would remove completed, unexported results. Do not offer a separate Discard action.
 - Pause on low storage, preserve completed outputs, remove the incomplete output, and allow retry after space becomes available.
 
 ## Background work and recovery

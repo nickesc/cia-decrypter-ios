@@ -2,7 +2,7 @@ import XCTest
 @testable import CIAKit
 
 final class BatchTests: XCTestCase {
-    func testIndividualExportsKeepSavedRowsThenClearAfterTheLastExport() {
+    func testIndividualExportsMoveToHistoryWithoutClearingTheSession() {
         var batch = completedBatch(count: 2)
         let ids = batch.jobs.map(\.id)
         batch.markExported([ids[0]], destination: .files)
@@ -10,24 +10,28 @@ final class BatchTests: XCTestCase {
         XCTAssertEqual(batch.jobs[0].exportDestination, .files)
         XCTAssertFalse(batch.jobs[1].exported)
         XCTAssertEqual(batch.unexportedResults.map(\.id), [ids[1]])
-        XCTAssertTrue(batch.clearIfFullyExported().isEmpty)
+        XCTAssertEqual(batch.activeJobs.map(\.id), [ids[1]])
+        XCTAssertEqual(batch.savedResults.map(\.id), [ids[0]])
         XCTAssertEqual(batch.jobs.count, 2)
 
         batch.markExported([ids[1]], destination: .files)
-        XCTAssertEqual(Set(batch.clearIfFullyExported().map(\.id)), Set(ids))
+        XCTAssertTrue(batch.activeJobs.isEmpty)
+        XCTAssertEqual(Set(batch.savedResults.map(\.id)), Set(ids))
+        XCTAssertEqual(batch.jobs.count, 2)
+        XCTAssertTrue(batch.isIdle)
+        batch.resetIdleSession()
         XCTAssertTrue(batch.jobs.isEmpty)
-        XCTAssertFalse(batch.isFullyExported)
     }
 
-    func testPendingOrFailedConversionsPreventAutomaticClearing() {
-        for status in [JobStatus.queued, .running, .failed, .interrupted, .storagePaused] {
+    func testUnfinishedOrUnsavedWorkPreservesHistoryOnRelaunch() {
+        for status in [JobStatus.queued, .running, .completed, .failed, .interrupted, .storagePaused] {
             var batch = completedBatch(count: 2)
             batch.jobs[1].status = status
-            batch.markExported(Set(batch.jobs.map(\.id)), destination: .files)
+            batch.markExported([batch.jobs[0].id], destination: .files)
             XCTAssertTrue(batch.jobs[0].exported)
             XCTAssertFalse(batch.jobs[1].exported)
-            XCTAssertFalse(batch.isFullyExported)
-            XCTAssertTrue(batch.clearIfFullyExported().isEmpty)
+            XCTAssertFalse(batch.isIdle)
+            batch.resetIdleSession()
             XCTAssertEqual(batch.jobs.count, 2)
         }
     }
@@ -36,7 +40,8 @@ final class BatchTests: XCTestCase {
         var batch = completedBatch(count: 2)
         batch.jobs[1].status = .cancelled
         batch.markExported([batch.jobs[0].id], destination: .files)
-        XCTAssertEqual(batch.clearIfFullyExported().count, 2)
+        XCTAssertTrue(batch.isIdle)
+        batch.resetIdleSession()
         XCTAssertTrue(batch.jobs.isEmpty)
     }
 
@@ -57,7 +62,7 @@ final class BatchTests: XCTestCase {
             XCTAssertTrue(restored.jobs[0].exported)
             XCTAssertEqual(restored.jobs[0].exportDestination, .files)
             XCTAssertFalse(restored.jobs[1].exported)
-            XCTAssertFalse(restored.isFullyExported)
+            XCTAssertFalse(restored.isIdle)
         }
     }
 
@@ -66,18 +71,63 @@ final class BatchTests: XCTestCase {
         batch.markExported([UUID()], destination: .files)
         XCTAssertFalse(batch.jobs[0].exported)
         XCTAssertNil(batch.jobs[0].exportDestination)
-        XCTAssertTrue(batch.clearIfFullyExported().isEmpty)
+        XCTAssertTrue(batch.savedResults.isEmpty)
+        XCTAssertEqual(batch.activeJobs.count, 1)
         XCTAssertEqual(batch.jobs.count, 1)
+        for status in [JobStatus.queued, .running, .failed, .interrupted, .storagePaused, .cancelled] {
+            batch.jobs[0].status = status
+            batch.markExported([batch.jobs[0].id], destination: .files)
+            XCTAssertFalse(batch.jobs[0].exported)
+            XCTAssertTrue(batch.savedResults.isEmpty)
+        }
     }
 
-    func testMixingIndividualAndBatchExportsClearsOnlyAfterRemainingResultsAreSaved() {
+    func testMixingIndividualAndBulkExportsKeepsAllSavedHistory() {
         var batch = completedBatch(count: 3)
         batch.markExported([batch.jobs[0].id], destination: .files)
         let remaining = Set(batch.unexportedResults.map(\.id))
         XCTAssertEqual(remaining.count, 2)
         batch.markExported(remaining, destination: .files)
-        XCTAssertEqual(batch.clearIfFullyExported().count, 3)
-        XCTAssertTrue(batch.jobs.isEmpty)
+        XCTAssertTrue(batch.activeJobs.isEmpty)
+        XCTAssertEqual(batch.savedResults.count, 3)
+        XCTAssertTrue(batch.isIdle)
+    }
+
+    func testRedoMovesSavedHistoryBackToTheQueueAndResetsOutputState() throws {
+        try withDirectory { root in
+            var batch = completedBatch(count: 2)
+            let job = batch.jobs[0]
+            batch.jobs[0].outputBytes = 200
+            batch.markExported([job.id], destination: .share)
+            XCTAssertTrue(batch.requeue(job.id))
+            XCTAssertEqual(batch.jobs[0].id, job.id)
+            XCTAssertEqual(batch.jobs[0].sourceBookmark, job.sourceBookmark)
+            XCTAssertEqual(batch.jobs[0].inputName, job.inputName)
+            XCTAssertEqual(batch.jobs[0].status, .queued)
+            XCTAssertEqual(batch.jobs[0].progress, 0)
+            XCTAssertFalse(batch.jobs[0].exported)
+            XCTAssertNil(batch.jobs[0].exportDestination)
+            XCTAssertNil(batch.jobs[0].outputBytes)
+            XCTAssertTrue(batch.savedResults.isEmpty)
+            XCTAssertFalse(batch.requeue(job.id))
+            XCTAssertFalse(batch.requeue(batch.jobs[1].id))
+            let snapshot = root.appendingPathComponent("queue.json")
+            try batch.save(to: snapshot)
+            let restored = try ConversionBatch.load(from: snapshot)
+            XCTAssertEqual(restored.jobs[0].status, .queued)
+            XCTAssertEqual(restored.activeJobs.count, 2)
+        }
+    }
+
+    func testHistoryDoesNotCountTowardNewConversionProgress() {
+        var batch = completedBatch(count: 2)
+        batch.markExported(Set(batch.jobs.map(\.id)), destination: .files)
+        XCTAssertEqual(batch.fraction, 1)
+        XCTAssertTrue(batch.requeue(batch.jobs[0].id))
+        XCTAssertEqual(batch.fraction, 0)
+        batch.jobs[0].status = .running
+        batch.jobs[0].progress = 0.25
+        XCTAssertEqual(batch.fraction, 0.25)
     }
 
     func testBatchExportReportsOnlyFilesSuccessfullyWrittenBeforeFailure() throws {
@@ -86,8 +136,13 @@ final class BatchTests: XCTestCase {
             try Data([4, 5, 6]).write(to: source)
             var exported: [String] = []
             let files = [ExportFile(source: source, name: "Saved.3ds"), ExportFile(source: root.appendingPathComponent("missing.3ds"), name: "Missing.3ds")]
-            XCTAssertThrowsError(try BatchExporter.export(files, to: root, onFileExported: { exported.append($0.name) }))
+            XCTAssertThrowsError(try BatchExporter.export(files, to: root, onFileExported: { file in
+                exported.append(file.name)
+                do { try FileManager.default.removeItem(at: file.source) }
+                catch { XCTFail("Could not remove the exported working copy: \(error)") }
+            }))
             XCTAssertEqual(exported, ["Saved.3ds"])
+            XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
             XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("Saved.3ds")), Data([4, 5, 6]))
             let control = ConversionControl()
             control.cancel()

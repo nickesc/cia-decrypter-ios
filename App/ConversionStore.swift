@@ -11,6 +11,7 @@ final class ConversionStore {
     private(set) var isExporting = false
     private(set) var exportProgress = 0.0
     private(set) var isPaused = false
+    private(set) var hasStartedSession = false
     var notice: String?
     var alert: String?
     let vault: KeyVault
@@ -41,17 +42,20 @@ final class ConversionStore {
                     FileManager.default.fileExists(atPath: directory.appendingPathComponent(job.id.uuidString).appendingPathComponent(job.outputName).path)
                 }
                 for job in batch.jobs { try? FileManager.default.removeItem(at: outputURL(job).appendingPathExtension("partial")) }
-                persist()
-                clearExportedBatchIfFinished()
+                let previous = batch
+                batch.resetIdleSession()
+                if persist() {
+                    for job in previous.jobs where job.isSaved || batch.jobs.isEmpty { removeWorkspace(job) }
+                } else { batch = previous }
+                hasStartedSession = !batch.jobs.isEmpty
             } catch { alert = "The saved conversions could not be read. Existing working files have been kept. \(error.localizedDescription)" }
         }
     }
 
-    var completed: [ConversionJob] { batch.completed }
     var canExportAll: Bool { batch.hasUnexportedResults && !isRunning && (!batch.hasQueuedWork || isPaused) && !isExporting }
     var needsCancelConfirmation: Bool { batch.hasUnexportedResults }
     var pendingCount: Int { batch.jobs.filter { $0.status == .queued || $0.status == .running }.count }
-    var resultBytes: UInt64 { completed.reduce(0) { $0 + ($1.outputBytes ?? 0) } }
+    var resultBytes: UInt64 { batch.unexportedResults.reduce(0) { $0 + ($1.outputBytes ?? 0) } }
 
     func outputURL(_ job: ConversionJob) -> URL {
         directory.appendingPathComponent(job.id.uuidString, isDirectory: true).appendingPathComponent(job.outputName)
@@ -69,6 +73,7 @@ final class ConversionStore {
                 let job = ConversionJob(inputName: url.lastPathComponent, sourceBookmark: bookmark, inputBytes: Int64(size))
                 try FileManager.default.createDirectory(at: outputURL(job).deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
                 batch.jobs.append(job)
+                hasStartedSession = true
             } catch { alert = error.localizedDescription }
         }
         guard persist() else { return }
@@ -86,11 +91,13 @@ final class ConversionStore {
     }
 
     func retry(_ id: UUID) {
-        guard !isExporting, let index = batch.jobs.firstIndex(where: { $0.id == id }), batch.jobs[index].status.canRetry else { return }
-        batch.jobs[index].status = .queued
-        batch.jobs[index].progress = 0
-        batch.jobs[index].message = nil
-        guard persist() else { return }
+        guard !isExporting, let job = batch.jobs.first(where: { $0.id == id }), job.isSaved || job.status.canRetry else { return }
+        do {
+            try FileManager.default.createDirectory(at: outputURL(job).deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        } catch { alert = "The working folder could not be opened. \(error.localizedDescription)"; return }
+        let previous = batch
+        guard batch.requeue(id) else { return }
+        guard persist() else { batch = previous; return }
         isPaused = false
         start()
     }
@@ -111,7 +118,6 @@ final class ConversionStore {
             batch.jobs[index].status = .cancelled
             batch.jobs[index].message = nil
             persist()
-            clearExportedBatchIfFinished()
         }
     }
 
@@ -124,9 +130,12 @@ final class ConversionStore {
     }
 
     func markExported(_ ids: Set<UUID>, destination: ExportDestination) {
+        let previous = batch
         batch.markExported(ids, destination: destination)
-        guard persist() else { return }
-        clearExportedBatchIfFinished()
+        // Save the receipt before removing the only local working copy.
+        guard persist() else { batch = previous; return }
+        for job in batch.savedResults where ids.contains(job.id) { removeWorkspace(job) }
+        if batch.isIdle { notice = nil }
     }
 
     func exportAll(to folder: URL) {
@@ -173,7 +182,7 @@ final class ConversionStore {
             // Apply receipts again after the worker finishes so late progress tasks cannot lose a saved state.
             markExported(savedIDs, destination: .files)
             if case .failure(let error) = outcome {
-                alert = "Export stopped. Unsaved results are still in the app. Files already saved are marked and remain in the chosen folder. \(error.localizedDescription)"
+                alert = "Export stopped. Unsaved results are still in the app. Exported files are in Saved and remain in the chosen folder. \(error.localizedDescription)"
             }
             isExporting = false
             exportControl = nil
@@ -250,7 +259,7 @@ final class ConversionStore {
         if let id = backgroundID { BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: id) }
         backgroundID = nil
         if cancelRequested { clearBatch() }
-        else { clearExportedBatchIfFinished() }
+        else if !isPaused { notice = nil }
     }
 
     private func update(_ id: UUID, progress: ConversionProgress) {
@@ -266,26 +275,16 @@ final class ConversionStore {
         catch { alert = "The queue could not be saved. Completed files have been kept. Free storage and try again. \(error.localizedDescription)"; return false }
     }
 
-    private func clearExportedBatchIfFinished() {
-        guard batch.isFullyExported else { return }
-        let previous = batch
-        let jobs = batch.clearIfFullyExported()
-        // Commit the cleared queue before deleting app-owned files.
-        guard persist() else { batch = previous; return }
-        for job in jobs { removeWorkspace(job) }
-        notice = nil
-        isPaused = false
-    }
-
     private func clearBatch() {
-        let jobs = batch.jobs
-        batch = ConversionBatch()
+        let previous = batch
+        let jobs = batch.activeJobs
+        batch.jobs = batch.savedResults
         if persist() {
             for job in jobs { removeWorkspace(job) }
             notice = nil
             isPaused = false
             cancelRequested = false
-        } else { batch.jobs = jobs }
+        } else { batch = previous }
     }
 
     private func removeWorkspace(_ job: ConversionJob) {
@@ -325,6 +324,6 @@ final class ConversionStore {
 
     private func updateBackground() {
         background?.progress.completedUnitCount = Int64(batch.fraction * 1_000_000)
-        background?.updateTitle("Converting CIA files", subtitle: "\(completed.count) ready · \(pendingCount) remaining")
+        background?.updateTitle("Converting CIA files", subtitle: "\(batch.unexportedResults.count) ready · \(pendingCount) remaining")
     }
 }

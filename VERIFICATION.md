@@ -14,7 +14,7 @@ Physical-device acceptance checks remain for playback in Folium and Manic, devic
 
 The memory probe is repeatable with `Scripts/check-memory.py`; it uses an external local sample and deletes only its own temporary output. See README.md for commands. Game data and imported keys are not part of the test suite or release.
 
-## Export behavior — November 8, 2026
+## Earlier export behavior — November 8, 2026 (superseded below)
 
 - Core suite: 20 tests pass, including individual and mixed exports, pending/failed work, saved-state persistence, and receipts for partial batch exports.
 - Simulator UI with two synthetic outputs: canceling Save leaves both ready; the first successful save shows a tinted Saved to Files row; saving the final output individually returns to the empty state without Export All.
@@ -22,3 +22,12 @@ The memory probe is repeatable with `Scripts/check-memory.py`; it uses an extern
 - Save All and Share All skip results already exported. Shared results use a separate label; unsuccessful share callbacks do not mark a result exported.
 - Stacked Save All / Share All / Add CIA files verified in Simulator. Share All shows two synthetic documents; canceling preserves both. After individually saving one file, Save Unsaved / Share Unsaved appear and the share sheet contains only the other file. Completing that share through Save to Files clears the queue automatically. Core tests remain at 20 passing; Simulator build passes.
 - Manic's upstream `ApplicationSceneDelegate.scene(_:openURLContexts:)` accepts multiple file URLs and passes the copied files to its importer. A physical-device multi-file handoff to Manic still needs verification.
+
+## Per-file cleanup and Saved history — November 8, 2026
+
+- Core suite: 22 tests pass. Coverage includes active/history separation, receipt persistence and recovery without a local output, Redo state reset, progress excluding history, idle-session reset, and preservation of unfinished/unsaved work.
+- Simulator: saving one of two synthetic results moves it into a subdued Saved row with Redo and no save/share buttons. Filesystem assertions confirm only that result's working folder is deleted; the other output stays available.
+- Relaunching with an unsaved output preserves both the active result and Saved history. Redo resolves the original CIA bookmark, recreates the working folder, and converts a valid synthetic CIA successfully.
+- Save All removes each remaining working folder and leaves the conversion page open with two Saved rows. Redo from this idle page returns a row to the active list. Clear confirms before removing the unsaved result, preserves the other Saved row, and keeps the conversion page open.
+- Backgrounding and returning preserves idle history. A fresh launch with only Saved history resets to the initial screen. Original CIAs and destination copies remain untouched.
+- Save All and Share All remain side by side above Add CIA files, with fixed labels for single and mixed results. Physical-device SMB/LiveContainer Redo and emulator handoff still need testing.
