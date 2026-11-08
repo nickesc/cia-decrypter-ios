@@ -4,158 +4,74 @@
 
 # CIA Decrypter for iOS
 
-Convert Nintendo 3DS CIA files into decrypted `.3ds` files on your iPhone or iPad.
-
-**iOS 26+ · SwiftUI · On-device conversion**
-
-[Get started](#get-started) · [Usage](#usage) · [Command line](#command-line) · [Development](#development)
-
 </div>
 
-Choose one or more games, convert on your device, and export to Files for your emulator. Bring your own CIA files and keys; the app includes neither and needs no conversion server.
+Convert Nintendo 3DS CIA files into decrypted `.3ds` files on your iPhone or iPad. Choose one or more games, convert on your device, and save the results to Files for your emulator. Bring your own CIA files and decryption keys.
 
-## Features
+<a href="https://altstore.io/source/github.com/nickesc/cia-decrypter-ios/releases/latest/download/source.json?app=com.nickesc.ciadecrypter">
+  <img src="docs/altstore-badge-light.png" alt="Download on AltStore" width="245" />
+</a>
 
-- **Multiple files.** Queue several games, track progress, and save finished files while the next one converts.
-- **Local keys.** Import AES keys, title seeds, and Boot9 from Files and keep them between sessions.
-- **Background processing.** Continue user-started conversions when iOS grants background time.
-- **Recovery.** Keep queued files and completed results across interruptions. Retry failed files without stopping the rest of the queue.
-- **Safe exports.** Save or share one result or all unsaved results. Folder exports preserve separate files without overwriting existing names.
-- **Large-file support.** Process data in chunks, check free storage, and verify hashes before making an output available.
+## Install
 
-## Get started
+Install and update through **AltStore Classic** on an iPhone or iPad running **iOS 26 or later**.
 
-You need an iPhone or iPad running **iOS 26 or later**. To build the app, use a Mac with **Xcode 26 and the iOS 26 SDK**. The project uses Apple's frameworks with no third-party runtime packages.
+1. [Set up AltStore Classic](https://faq.altstore.io/altstore-classic) if you don't have it.
+2. Open AltStore's **Browse** tab, open **Sources**, and add the source URL below.
+3. Find **CIA Decrypter for iOS** in the source and install it.
 
-### Build in Xcode
-
-1. Clone this repository and open `CIADecrypter.xcodeproj`.
-2. Select the **CIADecrypter** scheme, your signing team, and your device.
-3. Build and run from Xcode.
-
-### Package for sideloading
-
-With [XcodeGen](https://github.com/yonaskolb/XcodeGen) installed, run:
-
-```sh
-bash Scripts/build-ipa.sh
+```text
+https://github.com/nickesc/cia-decrypter-ios/releases/latest/download/source.json
 ```
 
-The script regenerates the project and writes an unsigned IPA to `build/CIADecrypter.ipa` for AltStore or LiveContainer to re-sign. Building the checked-in Xcode project does not require XcodeGen.
+Keep the source added to get future updates through AltStore. Use AltStore's **My Apps** tab to refresh your installation when needed. See the [AltStore guide](https://faq.altstore.io/altstore-classic/your-altstore) for help.
 
-> [!NOTE]
-> The repository is private. Release downloads and the AltStore source require repository access. See [verification results](VERIFICATION.md) for completed checks and pending physical-device testing, including emulator playback, installation, key imports, Files providers, and background execution.
+For manual sideloading with AltStore or LiveContainer, download `CIADecrypter.ipa` from the [latest release](https://github.com/nickesc/cia-decrypter-ios/releases/latest).
 
 ## Usage
 
-1. Open **Keys** and import the files your game needs. Already-decrypted games need no keys.
-2. Tap **Add CIA files** and select one or more base-game `.cia` files. Conversion starts with one file at a time.
-3. Use **Save to Files** or **Share** on any ready result. For Folium, save to Files, then import from within Folium. Use Share for apps that accept `.3ds` files, such as Manic.
-4. When the queue finishes or pauses, use **Save All** to save separate `.3ds` files into a chosen folder, or **Share All** to send them through the system share sheet. These buttons sit side by side in one row above **Add CIA files** and skip files already saved or shared.
+1. Open **Keys** and import the [key files](#key-files) your game needs.
+2. Tap **Add CIA files** and select one or more `.cia` files.
+3. Use **Save to Files** or **Share** on a ready result. When the queue finishes or pauses, use **Save All** or **Share All** to export all remaining results.
+4. Import the `.3ds` files into your emulator.
 
-**In Progress** contains queued, running, paused, and interrupted conversions. Each row has Pause/Resume and X controls. Pause retains partial output across app restarts. X deletes that output and moves the row into **Finished**, where **Redo** starts again from the original CIA. The overview card switches between labeled **Pause All** and **Resume All** controls. Pause All pauses running and queued jobs without deleting their progress.
+For now, use **base-game CIAs** only. The app does not yet support updates, DLC, or system titles.
 
-**Finished** contains ready results, saved/shared history, errors, and deleted entries. Each successful export removes its working files; its row becomes subdued, labeled **Saved to Files** or **Shared**, with Redo instead of save/share buttons. The small **Clear** button beside the Finished heading changes to a red **Confirm?** on its first tap. Tap again to remove Finished entries and their working files. Running, queued, and paused conversions continue unchanged.
+## Key files
 
-The conversion page stays open when the lists empty, and you can keep adding files. Finished history stays through backgrounding. On a fresh launch, it resets only if there is no unfinished or unsaved work; otherwise the queue and history both return. Resume and Redo need the original CIA to remain accessible. Resume rechecks saved bytes and reconstructs integrity hashes before continuing; it does not rewrite those bytes. Failed or canceled export dialogs keep unsaved results for retry. Sharing counts as exported only when the system reports success; this does not confirm that the receiving emulator imported the files.
+Import files from **Keys** once and reuse them for future conversions. You can replace or remove them from the same screen.
 
-Keep source files available until conversion finishes. The app leaves original CIAs and imported key files untouched.
+| File           | Purpose                                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| `aes_keys.txt` | Keys for encrypted games.                                                                 |
+| `seeddb.bin`   | Title seeds required by some games.                                                       |
+| `boot9.bin`    | Keys from your full or protected retail Boot9 dump. Some games still need `aes_keys.txt`. |
 
-### Key files
+If a conversion reports a missing key or seed, import the required file, then tap **Redo**.
 
-| File | Purpose |
-| --- | --- |
-| `aes_keys.txt` | AES key components or normal common keys for encrypted content. |
-| `seeddb.bin` | Per-title seeds for games that use seeded encryption. |
-| `boot9.bin` | Key components from a valid full or protected retail Boot9 dump. |
+## Troubleshooting
 
-Boot9 alone does not supply all keys for all games. If a conversion reports a missing key or seed, import the required file in **Keys**, then tap **Redo**. You can replace or remove imports from the same screen.
+| Situation                            | Next step                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| Low storage                          | Free space, then resume. Save ready results to free up the app's working storage. |
+| Missing keys or a failed file        | Fix the reported cause and tap **Redo**. Other files can continue.                |
+| Paused or interrupted conversion     | Reopen the app and resume.                                                        |
+| Source moved or Files access expired | Select the CIA again through Files.                                               |
 
-The app stores secret key material in the device-only Keychain and seeds in protected local storage excluded from backup. Conversion exports contain no imported key material.
+If you use LiveContainer and run into background or file-picker issues, try its per-app **Fix Background Processing Tasks** and **Fix File Picker** settings.
 
-### Supported content
-
-The converter accepts encrypted or decrypted **base-game application CIAs** and creates trimmed, reconstructed card images for emulator use. It rejects updates, DLC, and system titles. Outputs are not byte-identical cartridge dumps.
-
-Supported encryption includes CIA AES-CBC, NCCH AES-CTR methods `0`, `1`, `0x0A`, and `0x0B`, seeded encryption, mixed-key ExeFS, and zero-key homebrew. NCCH versions 0 and 2 must use 512-byte media units. Before completing an output, the converter checks TMD metadata, CIA content hashes, and decrypted extended-header, ExeFS, and RomFS header hashes.
-
-### Recovery and background work
-
-| Situation | Next step |
-| --- | --- |
-| Low storage | Free space, then resume. Completed results stay available. |
-| Missing keys or a failed file | Fix the reported cause and tap **Redo**. Other files can continue. |
-| Paused or interrupted conversion | Reopen the app and resume. Saved partial output is checked before the conversion continues. |
-| Source moved or Files access expired | Select the CIA again through Files. |
-| Background processing unavailable | Keep the app open while converting. |
-
-iOS controls background runtime; force-quitting can interrupt a conversion. With LiveContainer, use a build containing its [background-processing fix](https://github.com/LiveContainer/LiveContainer/commit/53e83476f85837f0dfe1199ff402853cd0514d9b). Its per-app **Fix Background Processing Tasks** and **Fix File Picker** settings may also be needed.
-
-## Command line
-
-On macOS 14 or later, use the same conversion core from the terminal:
-
-```sh
-swift run cia-convert /path/to/input.cia build/output.3ds \
-  --aes /path/to/aes_keys.txt \
-  --seeds /path/to/seeddb.bin \
-  --boot9 /path/to/boot9.bin
-```
-
-Omit key arguments your input does not need. The converter refuses to overwrite an existing output.
-
-## Development
-
-Run the core tests, release-metadata tests, and unsigned device build:
-
-```sh
-swift test
-python3 -m unittest discover -s Tests/Python
-xcodebuild -quiet -project CIADecrypter.xcodeproj -scheme CIADecrypter \
-  -configuration Release -destination 'generic/platform=iOS' \
-  -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
-```
-
-Tests use synthetic data and NIST AES vectors. They cover encryption, integrity failures, missing keys, cancellation, storage checks, recovery, and export collisions. [VERIFICATION.md](VERIFICATION.md) records build results, local conversions, memory measurements, and remaining device checks.
+## For developers
 
 <details>
-<summary>Check memory use with a local game file</summary>
 
-```sh
-swift build -c release --product cia-convert
-python3 Scripts/check-memory.py /path/to/large-input.cia \
-  --aes /path/to/aes_keys.txt \
-  --seeds /path/to/seeddb.bin \
-  --boot9 /path/to/boot9.bin
-```
+<summary>Expand to see development information</summary>
 
-Omit unused key arguments. The script checks macOS memory use against a 128 MiB budget and removes its temporary output. Device memory use still needs separate testing.
+Open `CIADecrypter.xcodeproj` in **Xcode 26 or later**, select your signing team, and run the **CIADecrypter** scheme. To package an unsigned IPA, install [XcodeGen](https://github.com/yonaskolb/XcodeGen) and run `bash Scripts/build-ipa.sh`.
+
+Run `swift test` for the conversion core and `python3 -m unittest discover -s Tests/Python` for release metadata. See [verification notes](VERIFICATION.md) for test results and remaining device checks, and the [release workflow](.github/workflows/release.yml) for IPA and AltStore source publishing.
 
 </details>
 
-### Project layout
+## License
 
-| Path | Contents |
-| --- | --- |
-| `App/` | SwiftUI screens, Keychain storage, Files integration, and background tasks. |
-| `Sources/CIAKit/` | Conversion, key parsing, persistent queues, and export. |
-| `Sources/CCrypto/` | Bridge to Apple's CommonCrypto AES implementation. |
-| `Sources/CIAConvert/` | Command-line converter. |
-| `Tests/` | Swift core tests and Python release-metadata tests. |
-| `Scripts/` | IPA packaging, source metadata, icon rendering, and memory checks. |
-
-Edit [docs/icon.svg](docs/icon.svg) to change the icon, then run `swift Scripts/GenerateIcon.swift` to update the app and distribution PNGs. Icon rendering requires `rsvg-convert` from librsvg to preserve SVG filters and shadows. Third-party notices ship in [App/ThirdPartyNotices.txt](App/ThirdPartyNotices.txt).
-
-### Releases and AltStore
-
-The [Test workflow](.github/workflows/test.yml) runs Swift and Python tests, checks packaging-script syntax, and builds for iOS Simulator with Xcode 26.3. It runs on pushes to `main`, pull requests, and manual dispatch.
-
-To release, update the version and build in `project.yml`, run `xcodegen generate`, commit the changes, and push a matching version tag such as `v0.1.0`. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the unsigned IPA, validates the tag, and publishes `CIADecrypter.ipa`, `source.json`, and `icon.png`. It also accepts manual runs for an existing tag and refuses to replace a published release.
-
-To prepare source metadata from a local IPA:
-
-```sh
-python3 Scripts/make-source.py build/CIADecrypter.ipa
-```
-
-This writes `build/distribution/source.json` and `icon.png` using the packaged version, build, minimum OS, and byte size. CI generates these files for each release. Once public releases are available, the AltStore source address is [releases/latest/download/source.json](https://github.com/nickesc/cia-decrypter-ios/releases/latest/download/source.json).
+This project uses the [MIT License](LICENSE).
