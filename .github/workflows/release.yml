@@ -60,14 +60,7 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > build/release-is-draft.txt; then
-            if ! grep -qx true build/release-is-draft.txt; then
-              echo 'This release is already published. Bump the version and build for a new release.' >&2
-              exit 1
-            fi
-            gh release upload "$RELEASE_TAG" build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png --clobber
-            gh release edit "$RELEASE_TAG" --draft=false --title "CIA Decrypter for iOS $RELEASE_TAG" --notes-file RELEASE_NOTES.md
-          else
-            gh release create "$RELEASE_TAG" build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png --verify-tag --title "CIA Decrypter for iOS $RELEASE_TAG" --notes-file RELEASE_NOTES.md
-          fi
+        run: >-
+          gh release create "$RELEASE_TAG"
+          build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png
+          --verify-tag --title "CIA Decrypter for iOS $RELEASE_TAG" --generate-notes
