@@ -2,7 +2,7 @@ import SwiftUI
 import CIAKit
 
 private struct ExportRequest: Identifiable {
-    enum Kind { case save(ConversionJob), share(ConversionJob), folder }
+    enum Kind { case save(ConversionJob), share([ConversionJob]), folder }
     let id = UUID()
     let kind: Kind
 }
@@ -14,13 +14,11 @@ struct ContentView: View {
     @State private var confirmingCancel = false
     @State private var export: ExportRequest?
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    masthead
                     if store.batch.jobs.isEmpty {
                         emptyState
                     } else {
@@ -77,9 +75,9 @@ struct ContentView: View {
                         if !urls.isEmpty { store.markExported([job.id], destination: .files) }
                         export = nil
                     } onCancel: { export = nil }
-                case .share(let job):
-                    SharePicker(urls: [store.outputURL(job)]) { completed in
-                        if completed { store.markExported([job.id], destination: .share) }
+                case .share(let jobs):
+                    SharePicker(urls: jobs.map { store.outputURL($0) }) { completed in
+                        if completed { store.markExported(Set(jobs.map(\.id)), destination: .share) }
                         export = nil
                     }
                     .presentationDetents([.medium, .large])
@@ -102,23 +100,6 @@ struct ContentView: View {
         }
     }
 
-    private var masthead: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "lock.open.fill")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 54, height: 62)
-                .background(Color.conversionAccent, in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("CIA Decrypter").font(.title.weight(.bold)).fontDesign(.rounded)
-                Text("for iOS").font(.subheadline).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 8)
-    }
-
     private var emptyState: some View {
         VStack(spacing: 28) {
             HStack(spacing: 18) {
@@ -128,10 +109,10 @@ struct ContentView: View {
             }
             .accessibilityHidden(true)
             VStack(spacing: 10) {
-                Text("Ready for your next game.")
-                    .font(.title2.weight(.bold)).fontDesign(.rounded)
+                Text("Ready to decrypt.")
+                    .font(.title2.weight(.bold))
                     .multilineTextAlignment(.center)
-                Text("Convert CIA files for Folium, Manic, or Files.\nEverything happens on your device.")
+                Text("Convert CIA to 3DS.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -167,7 +148,7 @@ struct ContentView: View {
             ProgressView(value: store.batch.fraction)
                 .accessibilityLabel("Conversion progress")
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(store.completed.count)").font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
+                Text("\(store.completed.count)").font(.largeTitle.weight(.bold)).monospacedDigit()
                 Text("of \(store.batch.jobs.count) ready").foregroundStyle(.secondary)
             }
             if store.resultBytes > 0 {
@@ -194,7 +175,7 @@ struct ContentView: View {
                     JobRow(job: job, busy: store.isExporting) {
                         export = ExportRequest(kind: .save(job))
                     } share: {
-                        export = ExportRequest(kind: .share(job))
+                        export = ExportRequest(kind: .share([job]))
                     } retry: {
                         store.retry(job.id)
                     } cancel: {
@@ -211,21 +192,25 @@ struct ContentView: View {
                 ProgressView("Exporting \(store.exportProgress.formatted(.percent.precision(.fractionLength(0))))", value: store.exportProgress)
                 Button("Cancel export", role: .cancel) { store.cancelExport() }
             } else {
-                actionLayout {
-                    Button { importing = true } label: {
-                        Label("Add CIA files", systemImage: "plus")
+                if !store.batch.jobs.isEmpty {
+                    Button { export = ExportRequest(kind: .folder) } label: {
+                        Label(exportTitle("Save"), systemImage: "folder")
                             .frame(maxWidth: .infinity).padding(.vertical, 6)
                     }
-                    .buttonStyle(.borderedProminent)
-                    if !store.batch.jobs.isEmpty {
-                        Button { export = ExportRequest(kind: .folder) } label: {
-                            Label(exportTitle, systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity).padding(.vertical, 6)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!store.canExportAll)
+                    .buttonStyle(.bordered)
+                    .disabled(!store.canExportAll)
+                    Button { export = ExportRequest(kind: .share(store.batch.unexportedResults)) } label: {
+                        Label(exportTitle("Share"), systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
                     }
+                    .buttonStyle(.bordered)
+                    .disabled(!store.canExportAll)
                 }
+                Button { importing = true } label: {
+                    Label("Add CIA files", systemImage: "plus")
+                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
         .padding(.horizontal, 24)
@@ -235,13 +220,9 @@ struct ContentView: View {
         .background(.bar)
     }
 
-    private var exportTitle: String {
-        if store.completed.contains(where: \.exported) { return "Export Unsaved" }
-        return store.batch.unexportedResults.count > 1 ? "Export All" : "Export"
-    }
-
-    private var actionLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+    private func exportTitle(_ action: String) -> String {
+        if store.completed.contains(where: \.exported) { return "\(action) Unsaved" }
+        return store.batch.unexportedResults.count > 1 ? "\(action) All" : action
     }
 }
 
