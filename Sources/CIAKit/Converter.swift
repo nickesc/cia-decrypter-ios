@@ -116,6 +116,7 @@ public enum CIAConverter {
         guard verification.size == end, try verification.read(0x100, 4) == Data("NCSD".utf8) else {
             throw ConversionError.integrity("The output card image is incomplete.")
         }
+        try control.check()
         try fm.moveItem(at: partial, to: output)
         finished = true
         progress(.init(fraction: 1, phase: "Ready to export"))

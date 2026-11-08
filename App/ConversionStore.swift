@@ -146,7 +146,10 @@ final class ConversionStore {
                     coordinator.coordinate(writingItemAt: folder, options: .forMerging, error: &coordinationError) { coordinated in
                         result = Result {
                             try BatchExporter.export(files, to: coordinated, control: control) { progress in
-                                Task { @MainActor [weak self] in self?.exportProgress = progress }
+                                Task { @MainActor [weak self] in
+                                    guard let self, self.exportControl === control else { return }
+                                    self.exportProgress = progress
+                                }
                             }
                         }
                     }
@@ -181,7 +184,13 @@ final class ConversionStore {
             self.control = control
             batch.jobs[index].status = .running
             batch.jobs[index].message = "Checking contents"
-            guard persist() else { isPaused = true; break }
+            guard persist() else {
+                batch.jobs[index].status = .storagePaused
+                batch.jobs[index].message = "The queue could not be saved. Free storage, then resume the batch."
+                self.control = nil
+                isPaused = true
+                break
+            }
             do {
                 let result = try await Task.detached(priority: .userInitiated) {
                     var stale = false
@@ -275,7 +284,7 @@ final class ConversionStore {
                 task.progress.totalUnitCount = 1_000_000
                 task.expirationHandler = { [weak self] in
                     Task { @MainActor in
-                        guard let self else { return }
+                        guard let self, self.backgroundID == id else { return }
                         self.isPaused = true
                         self.control?.interrupt()
                         self.notice = "iOS stopped background processing. Completed files are safe; resume to continue."
