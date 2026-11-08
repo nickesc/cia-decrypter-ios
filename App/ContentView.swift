@@ -171,11 +171,11 @@ struct ContentView: View {
             }
             if store.isRunning {
                 Button("Pause All", systemImage: "pause.fill") { store.pauseAll() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .disabled(store.isExporting || !store.batch.jobs.contains { $0.status == .queued || $0.status == .running })
             } else if !store.batch.inProgressJobs.isEmpty {
                 Button("Resume All", systemImage: "play.fill") { store.resume() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .disabled(store.isExporting)
             }
         }
@@ -224,37 +224,44 @@ struct ContentView: View {
     }
 
     private var actions: some View {
-        VStack(spacing: 10) {
-            if store.isExporting {
-                ProgressView("Exporting \(store.exportProgress.formatted(.percent.precision(.fractionLength(0))))", value: store.exportProgress)
-                Button("Cancel export", role: .cancel) { store.cancelExport() }
-            } else {
-                if store.hasStartedSession {
-                    HStack(spacing: 12) {
-                        Button { export = ExportRequest(kind: .folder) } label: {
-                            Label("Save All", systemImage: "folder")
-                                .frame(maxWidth: .infinity).padding(.vertical, 6)
+        GlassEffectContainer(spacing: 10) {
+            VStack(spacing: 10) {
+                if store.isExporting {
+                    ProgressView("Exporting \(store.exportProgress.formatted(.percent.precision(.fractionLength(0))))", value: store.exportProgress)
+                        .padding(16)
+                        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                    Button("Cancel export", role: .cancel) { store.cancelExport() }
+                        .buttonStyle(.glass)
+                } else {
+                    if store.hasStartedSession {
+                        HStack(spacing: 12) {
+                            Button { export = ExportRequest(kind: .folder) } label: {
+                                Label("Save All", systemImage: "folder")
+                                    .frame(maxWidth: .infinity).padding(.vertical, 6)
+                            }
+                            Button { export = ExportRequest(kind: .share(store.batch.unexportedResults)) } label: {
+                                Label("Share All", systemImage: "square.and.arrow.up")
+                                    .frame(maxWidth: .infinity).padding(.vertical, 6)
+                            }
                         }
-                        Button { export = ExportRequest(kind: .share(store.batch.unexportedResults)) } label: {
-                            Label("Share All", systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity).padding(.vertical, 6)
-                        }
+                        .buttonStyle(.glass)
+                        .tint(.primary)
+                        .disabled(!store.canExportAll)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(!store.canExportAll)
+                    Button { importing = true } label: {
+                        Label("Add CIA files", systemImage: "plus")
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.glassProminent)
                 }
-                Button { importing = true } label: {
-                    Label("Add CIA files", systemImage: "plus")
-                        .frame(maxWidth: .infinity).padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
             }
+            .controlSize(.large)
+            .buttonBorderShape(.capsule)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
         .frame(maxWidth: 1000)
         .frame(maxWidth: .infinity)
-        .background(.bar)
     }
 }
 
@@ -304,6 +311,7 @@ private struct JobRow: View {
                 if !job.isSaved && job.status != .cancelled {
                     Button("Delete progress for \(job.inputName)", systemImage: "xmark", action: delete)
                         .labelStyle(.iconOnly)
+                        .fontWeight(.semibold)
                         .frame(minWidth: 44, minHeight: 44)
                         .disabled(busy)
                 }
@@ -328,12 +336,12 @@ private struct JobRow: View {
                     Button("Save to Files", systemImage: "folder", action: save)
                     Button("Share", systemImage: "square.and.arrow.up", action: share)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .controlSize(.large)
                 .disabled(busy)
             } else if job.isSaved || job.status.canRetry {
                 Button("Redo", systemImage: "arrow.clockwise", action: retry)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .accessibilityLabel("Redo \(job.inputName)")
                     .disabled(busy)
             }
