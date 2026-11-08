@@ -35,6 +35,7 @@ class SourceMetadataTests(unittest.TestCase):
             result, ipa, output = self.run_generator(Path(temp))
             self.assertEqual(result.returncode, 0, result.stderr)
             source = json.loads(output.read_text())
+            self.assertEqual(source["website"], "https://example.github.io/converter/altstore/")
             app = source["apps"][0]
             version = app["versions"][0]
             base = "https://github.com/example/converter/releases/download/v0.1.0"

@@ -2,7 +2,7 @@
   "name": "CIA Decrypter for iOS",
   "subtitle": "On-device CIA conversion",
   "iconURL": "https://github.com/nickesc/cia-decrypter-ios/releases/download/v0.1.0/icon.png",
-  "website": "https://github.com/nickesc/cia-decrypter-ios",
+  "website": "https://nickesc.github.io/cia-decrypter-ios/altstore/",
   "tintColor": "#DB3340",
   "apps": [
     {

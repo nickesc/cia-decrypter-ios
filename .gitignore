@@ -16,3 +16,5 @@ boot9*.bin
 Secrets/
 __pycache__/
 *.py[cod]
+node_modules/
+.svelte-kit/

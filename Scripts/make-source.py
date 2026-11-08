@@ -37,7 +37,7 @@ source = {
     "name": "CIA Decrypter for iOS",
     "subtitle": "On-device CIA conversion",
     "iconURL": f"{base}/icon.png",
-    "website": f"https://github.com/{args.repository}",
+    "website": f"https://{args.repository.split('/')[0]}.github.io/{args.repository.split('/')[1]}/altstore/",
     "tintColor": "#DB3340",
     "apps": [{
         "name": "CIA Decrypter for iOS",
