@@ -8,7 +8,7 @@
 
 Convert Nintendo 3DS CIA files into decrypted `.3ds` files on your iPhone or iPad. Choose one or more games, convert on your device, and save the results to Files for your emulator. Bring your own CIA files and decryption keys.
 
-<a href="https://altstore.io/source/github.com/nickesc/cia-decrypter-ios/releases/latest/download/source.json?app=com.nickesc.ciadecrypter">
+<a href="https://altstore.io/source/github.com/nickesc/cia-decrypter-ios/releases/latest/download/source.json?app=xyz.batcomputer.ciadecrypter">
   <img src="docs/altstore-badge-light.png" alt="Download on AltStore" width="245" />
 </a>
 

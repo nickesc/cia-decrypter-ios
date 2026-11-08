@@ -14,7 +14,7 @@ final class KeyVault {
     private(set) var imports: [KeyFileKind: KeyImport] = [:]
     private(set) var error: String?
     private let seedURL: URL
-    private let service = (Bundle.main.bundleIdentifier ?? "com.nickesc.ciadecrypter") + ".keys"
+    private let service = (Bundle.main.bundleIdentifier ?? "xyz.batcomputer.ciadecrypter") + ".keys"
 
     init(directory: URL) {
         seedURL = directory.appendingPathComponent("seeds.json")

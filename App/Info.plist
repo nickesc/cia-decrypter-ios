@@ -21,7 +21,7 @@
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.nickesc.cia-archive</string>
+				<string>xyz.batcomputer.cia-archive</string>
 			</array>
 		</dict>
 	</array>
@@ -81,7 +81,7 @@
 			<key>UTTypeDescription</key>
 			<string>CTR card image</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.nickesc.cci-image</string>
+			<string>xyz.batcomputer.cci-image</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
@@ -102,7 +102,7 @@
 			<key>UTTypeDescription</key>
 			<string>CTR importable archive</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.nickesc.cia-archive</string>
+			<string>xyz.batcomputer.cia-archive</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>

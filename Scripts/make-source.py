@@ -22,7 +22,7 @@ with zipfile.ZipFile(args.ipa) as archive:
     if len(info_paths) != 1:
         raise SystemExit("Expected exactly one app in the IPA.")
     info = plistlib.loads(archive.read(info_paths[0]))
-    if info["CFBundleIdentifier"] != "com.nickesc.ciadecrypter":
+    if info["CFBundleIdentifier"] != "xyz.batcomputer.ciadecrypter":
         raise SystemExit("Unexpected bundle identifier.")
     if any(name.endswith(".appex/Info.plist") for name in archive.namelist()):
         raise SystemExit("Audit extension permissions before publishing this IPA.")

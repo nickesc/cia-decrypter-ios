@@ -16,7 +16,7 @@ class SourceMetadataTests(unittest.TestCase):
         ipa = directory / "CIADecrypter.ipa"
         with zipfile.ZipFile(ipa, "w") as archive:
             archive.writestr("Payload/CIADecrypter.app/Info.plist", plistlib.dumps({
-                "CFBundleIdentifier": "com.nickesc.ciadecrypter",
+                "CFBundleIdentifier": "xyz.batcomputer.ciadecrypter",
                 "CFBundleShortVersionString": "0.1.0",
                 "CFBundleVersion": "3",
                 "MinimumOSVersion": "26.0",
@@ -37,6 +37,7 @@ class SourceMetadataTests(unittest.TestCase):
             source = json.loads(output.read_text())
             self.assertEqual(source["website"], "https://example.github.io/converter/altstore/")
             app = source["apps"][0]
+            self.assertEqual(app["bundleIdentifier"], "xyz.batcomputer.ciadecrypter")
             version = app["versions"][0]
             base = "https://github.com/example/converter/releases/download/v0.1.0"
             self.assertEqual(version["version"], "0.1.0")

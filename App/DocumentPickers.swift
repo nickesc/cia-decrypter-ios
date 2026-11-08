@@ -45,5 +45,5 @@ struct SharePicker: UIViewControllerRepresentable {
 }
 
 extension UTType {
-    static let ciaArchive = UTType(importedAs: "com.nickesc.cia-archive", conformingTo: .data)
+    static let ciaArchive = UTType(importedAs: "xyz.batcomputer.cia-archive", conformingTo: .data)
 }

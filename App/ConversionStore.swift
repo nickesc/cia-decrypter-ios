@@ -312,7 +312,7 @@ final class ConversionStore {
     }
 
     private func requestBackground() {
-        let prefix = (Bundle.main.bundleIdentifier ?? "com.nickesc.ciadecrypter") + ".conversion."
+        let prefix = (Bundle.main.bundleIdentifier ?? "xyz.batcomputer.ciadecrypter") + ".conversion."
         let id = prefix + UUID().uuidString
         backgroundID = id
         let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { [weak self] task in

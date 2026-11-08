@@ -1,6 +1,6 @@
 name: CIADecrypter
 options:
-  bundleIdPrefix: com.nickesc
+  bundleIdPrefix: xyz.batcomputer
   deploymentTarget:
     iOS: "26.0"
   createIntermediateGroups: true
@@ -27,7 +27,7 @@ targets:
         product: CIAKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nickesc.ciadecrypter
+        PRODUCT_BUNDLE_IDENTIFIER: xyz.batcomputer.ciadecrypter
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -65,9 +65,9 @@ targets:
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
             LSItemContentTypes:
-              - com.nickesc.cia-archive
+              - xyz.batcomputer.cia-archive
         UTImportedTypeDeclarations:
-          - UTTypeIdentifier: com.nickesc.cia-archive
+          - UTTypeIdentifier: xyz.batcomputer.cia-archive
             UTTypeDescription: CTR importable archive
             UTTypeConformsTo:
               - public.data
@@ -75,7 +75,7 @@ targets:
               public.filename-extension:
                 - cia
         UTExportedTypeDeclarations:
-          - UTTypeIdentifier: com.nickesc.cci-image
+          - UTTypeIdentifier: xyz.batcomputer.cci-image
             UTTypeDescription: CTR card image
             UTTypeConformsTo:
               - public.data
