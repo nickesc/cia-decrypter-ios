@@ -10,8 +10,8 @@ final class ConversionStore {
     private(set) var isRunning = false
     private(set) var isExporting = false
     private(set) var exportProgress = 0.0
-    private(set) var isPaused = false
     private(set) var hasStartedSession = false
+    private(set) var workingJobID: UUID?
     var notice: String?
     var alert: String?
     let vault: KeyVault
@@ -22,7 +22,6 @@ final class ConversionStore {
     @ObservationIgnored private var exportControl: ConversionControl?
     @ObservationIgnored private var background: BGContinuedProcessingTask?
     @ObservationIgnored private var backgroundID: String?
-    @ObservationIgnored private var cancelRequested = false
 
     init() {
         directory = URL.applicationSupportDirectory.appendingPathComponent("ConversionWorkspace", isDirectory: true)
@@ -38,22 +37,29 @@ final class ConversionStore {
         if FileManager.default.fileExists(atPath: snapshot.path) {
             do {
                 batch = try ConversionBatch.load(from: snapshot)
-                batch.recover { job in
+                batch.recover(partialSize: { job in
+                    let partial = directory.appendingPathComponent(job.id.uuidString).appendingPathComponent(job.outputName).appendingPathExtension("partial")
+                    return (try? FileManager.default.attributesOfItem(atPath: partial.path)[.size] as? NSNumber)?.uint64Value ?? 0
+                }) { job in
                     FileManager.default.fileExists(atPath: directory.appendingPathComponent(job.id.uuidString).appendingPathComponent(job.outputName).path)
                 }
-                for job in batch.jobs { try? FileManager.default.removeItem(at: outputURL(job).appendingPathExtension("partial")) }
                 let previous = batch
                 batch.resetIdleSession()
                 if persist() {
-                    for job in previous.jobs where job.isSaved || batch.jobs.isEmpty { removeWorkspace(job) }
+                    for job in previous.jobs where job.isSaved || job.status == .cancelled || batch.jobs.isEmpty { removeWorkspace(job) }
                 } else { batch = previous }
                 hasStartedSession = !batch.jobs.isEmpty
             } catch { alert = "The saved conversions could not be read. Existing working files have been kept. \(error.localizedDescription)" }
         }
     }
 
-    var canExportAll: Bool { batch.hasUnexportedResults && !isRunning && (!batch.hasQueuedWork || isPaused) && !isExporting }
-    var needsCancelConfirmation: Bool { batch.hasUnexportedResults }
+    var isPaused: Bool { !isRunning && batch.inProgressJobs.contains { $0.status.canResume } }
+    var canExportAll: Bool { batch.hasUnexportedResults && !isRunning && !batch.hasQueuedWork && !isExporting }
+    var needsClearConfirmation: Bool { batch.hasUnexportedResults }
+    var stoppingJobID: UUID? {
+        guard let id = workingJobID, batch.jobs.first(where: { $0.id == id })?.status != .running else { return nil }
+        return id
+    }
     var pendingCount: Int { batch.jobs.filter { $0.status == .queued || $0.status == .running }.count }
     var resultBytes: UInt64 { batch.unexportedResults.reduce(0) { $0 + ($1.outputBytes ?? 0) } }
 
@@ -77,13 +83,11 @@ final class ConversionStore {
             } catch { alert = error.localizedDescription }
         }
         guard persist() else { return }
-        if !isPaused { start() }
+        start()
     }
 
     func start() {
         guard !isRunning, !isExporting, batch.hasQueuedWork else { return }
-        isPaused = false
-        cancelRequested = false
         isRunning = true
         notice = nil
         requestBackground()
@@ -91,42 +95,57 @@ final class ConversionStore {
     }
 
     func retry(_ id: UUID) {
-        guard !isExporting, let job = batch.jobs.first(where: { $0.id == id }), job.isSaved || job.status.canRetry else { return }
+        guard !isExporting, workingJobID != id, let job = batch.jobs.first(where: { $0.id == id }), job.isSaved || job.status.canRetry else { return }
+        guard removeWorkspace(job) else { return }
         do {
             try FileManager.default.createDirectory(at: outputURL(job).deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         } catch { alert = "The working folder could not be opened. \(error.localizedDescription)"; return }
         let previous = batch
         guard batch.requeue(id) else { return }
         guard persist() else { batch = previous; return }
-        isPaused = false
         start()
     }
 
-    func resume() {
-        for index in batch.jobs.indices where batch.jobs[index].status == .storagePaused || batch.jobs[index].status == .interrupted {
-            batch.jobs[index].status = .queued
-            batch.jobs[index].message = nil
-        }
-        guard persist() else { return }
-        start()
-    }
-
-    func cancel(_ id: UUID) {
-        guard !isExporting, let index = batch.jobs.firstIndex(where: { $0.id == id }) else { return }
-        if batch.jobs[index].status == .running { control?.cancel() }
-        else if batch.jobs[index].status == .queued {
-            batch.jobs[index].status = .cancelled
-            batch.jobs[index].message = nil
-            persist()
-        }
-    }
-
-    func cancelBatch() {
+    func resume(_ id: UUID? = nil) {
         guard !isExporting else { return }
-        cancelRequested = true
-        isPaused = true
-        control?.cancel()
-        if !isRunning { clearBatch() }
+        let previous = batch
+        for job in batch.inProgressJobs where (id == nil || job.id == id) && job.id != workingJobID {
+            batch.resume(job.id)
+        }
+        guard persist() else { batch = previous; return }
+        start()
+    }
+
+    func pause(_ id: UUID) {
+        guard !isExporting else { return }
+        guard batch.pause(id) else { return }
+        persist()
+        if workingJobID == id { control?.pause() }
+    }
+
+    func pauseAll() {
+        guard !isExporting else { return }
+        batch.pauseAll()
+        persist()
+        control?.pause()
+    }
+
+    func deleteProgress(_ id: UUID) {
+        guard !isExporting else { return }
+        let previous = batch
+        guard batch.deleteProgress(id) else { return }
+        guard persist() else { batch = previous; return }
+        if workingJobID == id { control?.cancel() }
+        else if let job = batch.jobs.first(where: { $0.id == id }) { removeWorkspace(job) }
+    }
+
+    func clearFinished() {
+        guard !isExporting else { return }
+        let previous = batch
+        let jobs = batch.clearFinished(excluding: Set([workingJobID].compactMap { $0 }))
+        guard persist() else { batch = previous; return }
+        for job in jobs { removeWorkspace(job) }
+        if batch.isIdle { notice = nil }
     }
 
     func markExported(_ ids: Set<UUID>, destination: ExportDestination) {
@@ -192,12 +211,13 @@ final class ConversionStore {
     func cancelExport() { exportControl?.cancel() }
 
     private func runQueue() async {
-        while !isPaused, !cancelRequested, let index = batch.jobs.firstIndex(where: { $0.status == .queued }) {
+        while let index = batch.jobs.firstIndex(where: { $0.status == .queued }) {
             let job = batch.jobs[index]
             let destination = outputURL(job)
             let keys = vault.material
             let control = ConversionControl()
             self.control = control
+            workingJobID = job.id
             batch.jobs[index].status = .running
             batch.jobs[index].exported = false
             batch.jobs[index].exportDestination = nil
@@ -206,7 +226,8 @@ final class ConversionStore {
                 batch.jobs[index].status = .storagePaused
                 batch.jobs[index].message = "The queue could not be saved. Free storage, then resume."
                 self.control = nil
-                isPaused = true
+                workingJobID = nil
+                batch.pauseAll()
                 break
             }
             do {
@@ -220,8 +241,11 @@ final class ConversionStore {
                     var result: Result<ConversionResult, Error>?
                     coordinator.coordinate(readingItemAt: source, options: .withoutChanges, error: &coordinationError) { coordinated in
                         result = Result {
-                            try CIAConverter.convert(input: coordinated, output: destination, keys: keys, control: control) { progress in
-                                Task { @MainActor [weak self] in self?.update(job.id, progress: progress) }
+                            try CIAConverter.convert(input: coordinated, output: destination, keys: keys, control: control, resumable: true) { progress in
+                                Task { @MainActor [weak self] in
+                                    guard let self, self.control === control else { return }
+                                    self.update(job.id, progress: progress)
+                                }
                             }
                         }
                     }
@@ -230,41 +254,46 @@ final class ConversionStore {
                     return try result.get()
                 }.value
                 if let current = batch.jobs.firstIndex(where: { $0.id == job.id }) {
-                    batch.jobs[current].status = .completed
-                    batch.jobs[current].progress = 1
-                    batch.jobs[current].message = nil
-                    batch.jobs[current].outputBytes = result.bytes
+                    if batch.jobs[current].status == .cancelled { removeWorkspace(batch.jobs[current]) }
+                    else {
+                        batch.jobs[current].status = .completed
+                        batch.jobs[current].progress = 1
+                        batch.jobs[current].message = nil
+                        batch.jobs[current].outputBytes = result.bytes
+                    }
                 }
             } catch {
                 if let current = batch.jobs.firstIndex(where: { $0.id == job.id }) {
                     let status: JobStatus
-                    if CIAConverter.isStorageError(error) { status = .storagePaused; isPaused = true }
-                    else if error as? ConversionError == .cancelled { status = .cancelled }
-                    else if error as? ConversionError == .interrupted { status = .interrupted; isPaused = true }
+                    if batch.jobs[current].status == .cancelled || error as? ConversionError == .cancelled { status = .cancelled }
+                    else if error as? ConversionError == .paused { status = .paused }
+                    else if CIAConverter.isStorageError(error) { status = .storagePaused; batch.pauseAll() }
+                    else if error as? ConversionError == .interrupted { status = .interrupted; batch.pauseAll() }
                     else { status = .failed }
                     batch.jobs[current].status = status
-                    batch.jobs[current].progress = 0
-                    batch.jobs[current].message = error.localizedDescription
+                    if !status.canResume { batch.jobs[current].progress = 0 }
+                    batch.jobs[current].message = status == .cancelled ? nil : error.localizedDescription
+                    if status == .cancelled { removeWorkspace(batch.jobs[current]) }
                 }
             }
             self.control = nil
-            guard persist() else { isPaused = true; break }
+            workingJobID = nil
+            guard persist() else { batch.pauseAll(); break }
             updateBackground()
         }
         isRunning = false
         worker = nil
-        let success = !isPaused && !cancelRequested
+        let success = !batch.inProgressJobs.contains { $0.status.canResume }
         background?.setTaskCompleted(success: success)
         background = nil
         if let id = backgroundID { BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: id) }
         backgroundID = nil
-        if cancelRequested { clearBatch() }
-        else if !isPaused { notice = nil }
+        if success { notice = nil }
     }
 
     private func update(_ id: UUID, progress: ConversionProgress) {
         guard let index = batch.jobs.firstIndex(where: { $0.id == id }), batch.jobs[index].status == .running else { return }
-        batch.jobs[index].progress = progress.fraction
+        batch.jobs[index].progress = max(batch.jobs[index].progress, progress.fraction)
         batch.jobs[index].message = progress.phase
         updateBackground()
     }
@@ -275,23 +304,12 @@ final class ConversionStore {
         catch { alert = "The queue could not be saved. Completed files have been kept. Free storage and try again. \(error.localizedDescription)"; return false }
     }
 
-    private func clearBatch() {
-        let previous = batch
-        let jobs = batch.activeJobs
-        batch.jobs = batch.savedResults
-        if persist() {
-            for job in jobs { removeWorkspace(job) }
-            notice = nil
-            isPaused = false
-            cancelRequested = false
-        } else { batch = previous }
-    }
-
-    private func removeWorkspace(_ job: ConversionJob) {
+    @discardableResult
+    private func removeWorkspace(_ job: ConversionJob) -> Bool {
         let folder = outputURL(job).deletingLastPathComponent()
-        guard FileManager.default.fileExists(atPath: folder.path) else { return }
-        do { try FileManager.default.removeItem(at: folder) }
-        catch { alert = "The result was saved, but temporary files could not be removed. \(error.localizedDescription)" }
+        guard FileManager.default.fileExists(atPath: folder.path) else { return true }
+        do { try FileManager.default.removeItem(at: folder); return true }
+        catch { alert = "Temporary conversion files could not be removed. \(error.localizedDescription)"; return false }
     }
 
     private func requestBackground() {
@@ -307,7 +325,8 @@ final class ConversionStore {
                 task.expirationHandler = { [weak self] in
                     Task { @MainActor in
                         guard let self, self.backgroundID == id else { return }
-                        self.isPaused = true
+                        self.batch.pauseAll()
+                        self.persist()
                         self.control?.interrupt()
                         self.notice = "iOS stopped background processing. Completed files are safe; resume to continue."
                     }

@@ -53,9 +53,11 @@ The script regenerates the project and writes an unsigned IPA to `build/CIADecry
 3. Use **Save to Files** or **Share** on any ready result. For Folium, save to Files, then import from within Folium. Use Share for apps that accept `.3ds` files, such as Manic.
 4. When the queue finishes or pauses, use **Save All** to save separate `.3ds` files into a chosen folder, or **Share All** to send them through the system share sheet. These buttons sit side by side in one row above **Add CIA files** and skip files already saved or shared.
 
-Each successful export removes that result's temporary working files and moves its row into **Saved**, labeled **Saved to Files** or **Shared**. Saved rows have **Redo** to convert the original CIA again; they cannot share a deleted output. The conversion page stays open when the active list empties, and you can keep adding files. **Clear** stops and removes active conversions and working results, with a confirmation for unexported files, while keeping Saved history.
+**In Progress** contains queued, running, paused, and interrupted conversions. Each row has Pause/Resume and X controls. Pause retains partial output across app restarts. X deletes that output and moves the row into **Finished**, where **Redo** starts again from the original CIA. The overview card switches between labeled **Pause All** and **Resume All** controls. Pause All pauses running and queued jobs without deleting their progress.
 
-Saved history stays through backgrounding. On a fresh launch, it resets only if there is no unfinished or unsaved work; otherwise the queue and history both return. Redo needs the original CIA to remain accessible. Failed or canceled export dialogs keep unsaved results for retry. A partially successful Save All moves only files already saved into Saved. Sharing counts as exported only when the system reports success; this does not confirm that the receiving emulator imported the files.
+**Finished** contains ready results, saved/shared history, errors, and deleted entries. Each successful export removes its working files; its row becomes subdued, labeled **Saved to Files** or **Shared**, with Redo instead of save/share buttons. **Clear** removes Finished entries and their working files, with confirmation for unexported results. Running, queued, and paused conversions continue unchanged.
+
+The conversion page stays open when the lists empty, and you can keep adding files. Finished history stays through backgrounding. On a fresh launch, it resets only if there is no unfinished or unsaved work; otherwise the queue and history both return. Resume and Redo need the original CIA to remain accessible. Resume rechecks saved bytes and reconstructs integrity hashes before continuing; it does not rewrite those bytes. Failed or canceled export dialogs keep unsaved results for retry. Sharing counts as exported only when the system reports success; this does not confirm that the receiving emulator imported the files.
 
 Keep source files available until conversion finishes. The app leaves original CIAs and imported key files untouched.
 
@@ -67,7 +69,7 @@ Keep source files available until conversion finishes. The app leaves original C
 | `seeddb.bin` | Per-title seeds for games that use seeded encryption. |
 | `boot9.bin` | Key components from a valid full or protected retail Boot9 dump. |
 
-Boot9 alone does not supply all keys for all games. If a conversion reports a missing key or seed, import the required file in **Keys**, then tap **Retry**. You can replace or remove imports from the same screen.
+Boot9 alone does not supply all keys for all games. If a conversion reports a missing key or seed, import the required file in **Keys**, then tap **Redo**. You can replace or remove imports from the same screen.
 
 The app stores secret key material in the device-only Keychain and seeds in protected local storage excluded from backup. Conversion exports contain no imported key material.
 
@@ -82,8 +84,8 @@ Supported encryption includes CIA AES-CBC, NCCH AES-CTR methods `0`, `1`, `0x0A`
 | Situation | Next step |
 | --- | --- |
 | Low storage | Free space, then resume. Completed results stay available. |
-| Missing keys or a failed file | Fix the reported cause and tap **Retry**. Other files can continue. |
-| Interrupted conversion | Reopen the app and resume. The interrupted file starts from the beginning. |
+| Missing keys or a failed file | Fix the reported cause and tap **Redo**. Other files can continue. |
+| Paused or interrupted conversion | Reopen the app and resume. Saved partial output is checked before the conversion continues. |
 | Source moved or Files access expired | Select the CIA again through Files. |
 | Background processing unavailable | Keep the app open while converting. |
 

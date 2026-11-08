@@ -11,7 +11,8 @@ struct ContentView: View {
     @Bindable var store: ConversionStore
     @State private var importing = false
     @State private var showingKeys = false
-    @State private var confirmingCancel = false
+    @State private var confirmingClear = false
+    @State private var deletingJob: ConversionJob?
     @State private var export: ExportRequest?
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -50,11 +51,11 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Keys", systemImage: "key") { showingKeys = true }
                 }
-                if !store.batch.activeJobs.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    if !store.batch.finishedJobs.isEmpty {
                         Button("Clear", role: .destructive) {
-                            if store.needsCancelConfirmation { confirmingCancel = true }
-                            else { store.cancelBatch() }
+                            if store.needsClearConfirmation { confirmingClear = true }
+                            else { store.clearFinished() }
                         }
                         .disabled(store.isExporting)
                     }
@@ -88,11 +89,20 @@ struct ContentView: View {
                     } onCancel: { export = nil }
                 }
             }
-            .confirmationDialog("Clear conversions?", isPresented: $confirmingCancel, titleVisibility: .visible) {
-                Button("Clear", role: .destructive) { store.cancelBatch() }
-                Button("Keep conversions", role: .cancel) {}
+            .confirmationDialog("Clear finished entries?", isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Clear", role: .destructive) { store.clearFinished() }
+                Button("Keep entries", role: .cancel) {}
             } message: {
-                Text("This stops conversions and removes completed results that you haven’t exported. Original CIA files stay untouched.")
+                Text("This removes finished entries and any converted files you haven’t exported. In-progress conversions and original CIA files stay untouched.")
+            }
+            .confirmationDialog("Delete converted file?", isPresented: Binding(get: { deletingJob != nil }, set: { if !$0 { deletingJob = nil } }), titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let job = deletingJob { store.deleteProgress(job.id) }
+                    deletingJob = nil
+                }
+                Button("Keep file", role: .cancel) { deletingJob = nil }
+            } message: {
+                Text("This removes the converted file from the app. You can redo it from the original CIA.")
             }
             .alert("Needs attention", isPresented: Binding(get: { store.alert != nil }, set: { if !$0 { store.alert = nil } })) {
                 Button("OK") { store.alert = nil }
@@ -159,8 +169,12 @@ struct ContentView: View {
                 Label(ByteCountFormatter.string(fromByteCount: Int64(store.resultBytes), countStyle: .file) + " in results", systemImage: "internaldrive")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            if !store.isRunning && (store.isPaused || store.batch.hasQueuedWork || store.batch.jobs.contains(where: { $0.status == .interrupted })) {
-                Button("Resume", systemImage: "play.fill") { store.resume() }
+            if store.isRunning {
+                Button("Pause All", systemImage: "pause.fill") { store.pauseAll() }
+                    .buttonStyle(.bordered)
+                    .disabled(store.isExporting || !store.batch.jobs.contains { $0.status == .queued || $0.status == .running })
+            } else if !store.batch.inProgressJobs.isEmpty {
+                Button("Resume All", systemImage: "play.fill") { store.resume() }
                     .buttonStyle(.bordered)
                     .disabled(store.isExporting)
             }
@@ -171,54 +185,38 @@ struct ContentView: View {
 
     private var queue: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("FILES")
-                .font(.caption.weight(.semibold)).tracking(1.3)
-                .foregroundStyle(.secondary)
-            LazyVStack(spacing: 12) {
-                ForEach(store.batch.activeJobs) { job in
-                    JobRow(job: job, busy: store.isExporting) {
-                        export = ExportRequest(kind: .save(job))
-                    } share: {
-                        export = ExportRequest(kind: .share([job]))
-                    } retry: {
-                        store.retry(job.id)
-                    } cancel: {
-                        store.cancel(job.id)
-                    }
-                }
-            }
-            if store.batch.activeJobs.isEmpty {
+            jobSection("IN PROGRESS", jobs: store.batch.inProgressJobs)
+            if store.batch.inProgressJobs.isEmpty {
                 Text("No files waiting")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(18)
                     .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
             }
-            if !store.batch.savedResults.isEmpty {
-                Text("SAVED")
-                    .font(.caption.weight(.semibold)).tracking(1.3)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 12)
-                LazyVStack(spacing: 12) {
-                    ForEach(store.batch.savedResults) { job in
-                        HStack(spacing: 12) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(job.inputName).font(.subheadline.weight(.semibold)).lineLimit(2)
-                                Text(job.exportLabel ?? "Saved").font(.caption)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            Button("Redo", systemImage: "arrow.clockwise") { store.retry(job.id) }
-                                .buttonStyle(.bordered)
-                                .controlSize(.large)
-                                .foregroundStyle(Color.conversionAccent)
-                                .accessibilityLabel("Redo \(job.inputName)")
-                                .disabled(store.isExporting)
-                        }
-                        .foregroundStyle(.secondary)
-                        .padding(18)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.5), in: RoundedRectangle(cornerRadius: 20))
+            if !store.batch.finishedJobs.isEmpty {
+                jobSection("FINISHED", jobs: store.batch.finishedJobs).padding(.top, 12)
+            }
+        }
+    }
+
+    private func jobSection(_ title: String, jobs: [ConversionJob]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.caption.weight(.semibold)).tracking(1.3).foregroundStyle(.secondary)
+            LazyVStack(spacing: 12) {
+                ForEach(jobs) { job in
+                    JobRow(job: job, busy: store.isExporting || store.stoppingJobID == job.id, stopping: store.stoppingJobID == job.id) {
+                        export = ExportRequest(kind: .save(job))
+                    } share: {
+                        export = ExportRequest(kind: .share([job]))
+                    } retry: {
+                        store.retry(job.id)
+                    } pause: {
+                        store.pause(job.id)
+                    } resume: {
+                        store.resume(job.id)
+                    } delete: {
+                        if job.status == .completed && !job.exported { deletingJob = job }
+                        else { store.deleteProgress(job.id) }
                     }
                 }
             }
@@ -264,10 +262,13 @@ private struct JobRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let job: ConversionJob
     let busy: Bool
+    let stopping: Bool
     let save: () -> Void
     let share: () -> Void
     let retry: () -> Void
-    let cancel: () -> Void
+    let pause: () -> Void
+    let resume: () -> Void
+    let delete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -280,8 +281,9 @@ private struct JobRow: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(job.inputName).font(.subheadline.weight(.semibold)).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .foregroundStyle(isRetired ? .secondary : .primary)
                     HStack(spacing: 7) {
-                        Text(job.status.label).foregroundStyle(statusColor)
+                        Text(job.exportLabel ?? job.status.label).foregroundStyle(statusColor)
                         Text("·").foregroundStyle(.tertiary)
                         Text(ByteCountFormatter.string(fromByteCount: job.inputBytes, countStyle: .file)).foregroundStyle(.secondary)
                     }
@@ -289,17 +291,31 @@ private struct JobRow: View {
                 }
                 Spacer(minLength: 0)
                 if job.status == .queued || job.status == .running {
-                    Button("Cancel file", systemImage: "xmark", action: cancel)
+                    Button("Pause \(job.inputName)", systemImage: "pause.fill", action: pause)
+                        .labelStyle(.iconOnly)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(busy)
+                } else if job.status.canResume {
+                    Button("Resume \(job.inputName)", systemImage: "play.fill", action: resume)
+                        .labelStyle(.iconOnly)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(busy)
+                }
+                if !job.isSaved && job.status != .cancelled {
+                    Button("Delete progress for \(job.inputName)", systemImage: "xmark", action: delete)
                         .labelStyle(.iconOnly)
                         .frame(minWidth: 44, minHeight: 44)
                         .disabled(busy)
                 }
             }
-            if job.status == .running {
+            if stopping {
+                ProgressView(job.status == .cancelled ? "Deleting progress…" : "Pausing…")
+                    .font(.footnote)
+            } else if job.status.isInProgress {
                 ProgressView(value: job.progress)
                     .accessibilityLabel("\(job.inputName) progress")
                 HStack {
-                    Text(job.message ?? "Converting")
+                    Text(job.message ?? job.status.label)
                     Spacer()
                     Text(job.progress.formatted(.percent.precision(.fractionLength(0)))).monospacedDigit()
                 }
@@ -307,7 +323,7 @@ private struct JobRow: View {
             } else if let message = job.message, job.status != .cancelled {
                 Text(message).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            if job.status == .completed {
+            if job.status == .completed && !job.exported {
                 resultLayout {
                     Button("Save to Files", systemImage: "folder", action: save)
                     Button("Share", systemImage: "square.and.arrow.up", action: share)
@@ -315,14 +331,15 @@ private struct JobRow: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
                 .disabled(busy)
-            } else if job.status.canRetry {
-                Button("Retry", systemImage: "arrow.clockwise", action: retry)
+            } else if job.isSaved || job.status.canRetry {
+                Button("Redo", systemImage: "arrow.clockwise", action: retry)
                     .buttonStyle(.bordered)
+                    .accessibilityLabel("Redo \(job.inputName)")
                     .disabled(busy)
             }
         }
         .padding(18)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .background(Color(uiColor: .secondarySystemGroupedBackground).opacity(isRetired ? 0.5 : 1), in: RoundedRectangle(cornerRadius: 20))
     }
 
     private var resultLayout: AnyLayout {
@@ -330,22 +347,26 @@ private struct JobRow: View {
     }
 
     private var symbol: String {
-        switch job.status {
+        if job.isSaved { return "checkmark.circle.fill" }
+        return switch job.status {
         case .queued: "clock"
         case .running: "arrow.trianglehead.2.clockwise.rotate.90"
         case .completed: "checkmark.circle.fill"
         case .failed, .storagePaused: "exclamationmark.triangle.fill"
-        case .interrupted: "pause.circle"
+        case .paused, .interrupted: "pause.circle"
         case .cancelled: "xmark.circle"
         }
     }
 
     private var statusColor: Color {
-        switch job.status {
+        if isRetired { return .secondary }
+        return switch job.status {
         case .completed: .green
         case .running: .conversionAccent
         case .failed, .storagePaused: .orange
         default: .secondary
         }
     }
+
+    private var isRetired: Bool { job.isSaved || job.status == .cancelled }
 }

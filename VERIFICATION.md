@@ -23,7 +23,7 @@ The memory probe is repeatable with `Scripts/check-memory.py`; it uses an extern
 - Stacked Save All / Share All / Add CIA files verified in Simulator. Share All shows two synthetic documents; canceling preserves both. After individually saving one file, Save Unsaved / Share Unsaved appear and the share sheet contains only the other file. Completing that share through Save to Files clears the queue automatically. Core tests remain at 20 passing; Simulator build passes.
 - Manic's upstream `ApplicationSceneDelegate.scene(_:openURLContexts:)` accepts multiple file URLs and passes the copied files to its importer. A physical-device multi-file handoff to Manic still needs verification.
 
-## Per-file cleanup and Saved history — November 8, 2026
+## Per-file cleanup and Saved history — November 8, 2026 (controls superseded below)
 
 - Core suite: 22 tests pass. Coverage includes active/history separation, receipt persistence and recovery without a local output, Redo state reset, progress excluding history, idle-session reset, and preservation of unfinished/unsaved work.
 - Simulator: saving one of two synthetic results moves it into a subdued Saved row with Redo and no save/share buttons. Filesystem assertions confirm only that result's working folder is deleted; the other output stays available.
@@ -31,3 +31,14 @@ The memory probe is repeatable with `Scripts/check-memory.py`; it uses an extern
 - Save All removes each remaining working folder and leaves the conversion page open with two Saved rows. Redo from this idle page returns a row to the active list. Clear confirms before removing the unsaved result, preserves the other Saved row, and keeps the conversion page open.
 - Backgrounding and returning preserves idle history. A fresh launch with only Saved history resets to the initial screen. Original CIAs and destination copies remain untouched.
 - Save All and Share All remain side by side above Add CIA files, with fixed labels for single and mixed results. Physical-device SMB/LiveContainer Redo and emulator handoff still need testing.
+
+## Independent pause, delete, and Clear — November 8, 2026
+
+- Core suite: 27 tests pass. New coverage checks section membership, pausing all jobs without losing progress, resume after persistence, Clear preserving running/queued/paused jobs, deletion into Finished followed by Redo, and protecting a worker while its files close.
+- Restart recovery recognizes a fully verified final output even if the queue recorded a late pause or interruption, while preserving an explicit deletion request.
+- Encrypted and decrypted multi-chunk fixtures pause after writing a prefix, retain their partial output, then resume to a complete verified image. Damaged partial output is rejected and removed. Interruption retains usable output; explicit cancellation removes it and takes precedence over later pause/interruption requests.
+- Resume reconstructs integrity hashes and compares retained output to decrypted source bytes before writing the missing suffix. It rereads the saved prefix, so resuming a large remote CIA still needs time and access to the original file. Partial output never becomes exportable before full verification.
+- Simulator with synthetic conversions: the all-jobs pause action stopped the current file and held the remaining queue. A retained partial output and all paused states survived a process restart; the UI restored the partial file at 2% progress. X removed that working folder, kept a Deleted history record, and left the other paused jobs intact.
+- Simulator Clear confirmed before removing three unsaved results, error history, and deleted history. Filesystem checks showed all finished outputs removed and all 28 remaining paused jobs preserved. Running-job preservation is also covered by the core Clear test.
+- Final UI places labeled Pause All / Resume All in the overview card, keeps Clear in the toolbar, and uses In Progress / Finished sections. Per-file Pause/Resume and X are separate controls; deleted and exported entries have Redo. The app no longer derives list behavior from global cancellation flags.
+- Physical-device background expiration, low-storage pause, and SMB/LiveContainer resume still need testing.

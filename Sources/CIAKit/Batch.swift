@@ -1,21 +1,24 @@
 import Foundation
 
 public enum JobStatus: String, Codable, Sendable {
-    case queued, running, completed, failed, cancelled, interrupted, storagePaused
+    case queued, running, paused, completed, failed, cancelled, interrupted, storagePaused
 
     public var label: String {
         switch self {
         case .queued: "Queued"
         case .running: "Converting"
+        case .paused: "Paused"
         case .completed: "Ready"
         case .failed: "Needs attention"
-        case .cancelled: "Canceled"
+        case .cancelled: "Deleted"
         case .interrupted: "Interrupted"
         case .storagePaused: "Storage full"
         }
     }
 
-    public var canRetry: Bool { self == .failed || self == .interrupted || self == .storagePaused || self == .cancelled }
+    public var canResume: Bool { self == .paused || self == .interrupted || self == .storagePaused }
+    public var canRetry: Bool { self == .failed || self == .cancelled }
+    public var isInProgress: Bool { self == .queued || self == .running || canResume }
 }
 
 public enum ExportDestination: String, Codable, Sendable {
@@ -60,12 +63,53 @@ public struct ConversionBatch: Codable, Sendable {
     public var jobs: [ConversionJob] = []
     public init() {}
     public var completed: [ConversionJob] { jobs.filter { $0.status == .completed } }
-    public var activeJobs: [ConversionJob] { jobs.filter { !$0.isSaved } }
+    public var inProgressJobs: [ConversionJob] { jobs.filter { $0.status.isInProgress } }
+    public var finishedJobs: [ConversionJob] { jobs.filter { !$0.status.isInProgress } }
+    public var activeJobs: [ConversionJob] { jobs.filter { $0.status.isInProgress || ($0.status == .completed && !$0.exported) } }
     public var savedResults: [ConversionJob] { jobs.filter(\.isSaved) }
     public var unexportedResults: [ConversionJob] { completed.filter { !$0.exported } }
     public var hasUnexportedResults: Bool { !unexportedResults.isEmpty }
     public var hasQueuedWork: Bool { jobs.contains { $0.status == .queued } }
-    public var isIdle: Bool { jobs.allSatisfy { $0.status == .cancelled || $0.isSaved } }
+    public var isIdle: Bool { inProgressJobs.isEmpty && !hasUnexportedResults }
+
+    @discardableResult
+    public mutating func pause(_ id: UUID) -> Bool {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].status == .queued || jobs[index].status == .running else { return false }
+        jobs[index].status = .paused
+        jobs[index].message = nil
+        return true
+    }
+
+    public mutating func pauseAll() {
+        for id in inProgressJobs.map(\.id) { pause(id) }
+    }
+
+    @discardableResult
+    public mutating func resume(_ id: UUID) -> Bool {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].status.canResume else { return false }
+        jobs[index].status = .queued
+        jobs[index].message = nil
+        return true
+    }
+
+    @discardableResult
+    public mutating func deleteProgress(_ id: UUID) -> Bool {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), !jobs[index].isSaved, jobs[index].status != .cancelled else { return false }
+        jobs[index].status = .cancelled
+        jobs[index].progress = 0
+        jobs[index].message = nil
+        jobs[index].outputBytes = nil
+        jobs[index].exported = false
+        jobs[index].exportDestination = nil
+        return true
+    }
+
+    public mutating func clearFinished(excluding ids: Set<UUID> = []) -> [ConversionJob] {
+        let removed = finishedJobs.filter { !ids.contains($0.id) }
+        let removedIDs = Set(removed.map(\.id))
+        jobs.removeAll { removedIDs.contains($0.id) }
+        return removed
+    }
 
     public mutating func markExported(_ ids: Set<UUID>, destination: ExportDestination) {
         for index in jobs.indices where ids.contains(jobs[index].id) && jobs[index].status == .completed {
@@ -93,23 +137,31 @@ public struct ConversionBatch: Codable, Sendable {
         guard !active.isEmpty else { return savedResults.isEmpty ? 0 : 1 }
         let total = active.reduce(0.0) { $0 + Double(max($1.inputBytes, 1)) }
         return active.reduce(0.0) { value, job in
-            let fraction = job.status == .queued ? 0 : job.status == .running ? job.progress : 1
+            let fraction = job.status.isInProgress ? job.progress : 1
             return value + Double(max(job.inputBytes, 1)) * fraction
         } / total
     }
 
-    public mutating func recover(outputExists: (ConversionJob) -> Bool) {
+    public mutating func recover(partialSize: (ConversionJob) -> UInt64 = { _ in 0 }, outputExists: (ConversionJob) -> Bool) {
         for index in jobs.indices {
-            if jobs[index].status == .running {
-                // A final .3ds is published only after all conversion checks succeed.
-                let finished = outputExists(jobs[index])
-                jobs[index].status = finished ? .completed : .interrupted
-                jobs[index].progress = finished ? 1 : 0
-                jobs[index].message = finished ? nil : ConversionError.interrupted.localizedDescription
+            // Publishing a final output wins a pause race, but never overrides deletion.
+            if jobs[index].status.isInProgress && outputExists(jobs[index]) {
+                jobs[index].status = .completed
+                jobs[index].progress = 1
+                jobs[index].message = nil
+            } else if jobs[index].status == .running {
+                jobs[index].status = .interrupted
+                jobs[index].message = ConversionError.interrupted.localizedDescription
             } else if jobs[index].status == .completed && !jobs[index].exported && !outputExists(jobs[index]) {
                 jobs[index].status = .failed
                 jobs[index].progress = 0
                 jobs[index].message = "The saved output is missing. Retry to convert this file again."
+            }
+            if jobs[index].status.canResume {
+                let bytes = partialSize(jobs[index])
+                if bytes > 0x4000 {
+                    jobs[index].progress = max(jobs[index].progress, min(0.99, Double(bytes - 0x4000) / Double(max(jobs[index].inputBytes, 1))))
+                }
             }
         }
     }

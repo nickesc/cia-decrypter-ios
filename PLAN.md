@@ -15,17 +15,19 @@ Confirmed November 7, 2026. Build a personal, entirely on-device CIA-to-`.3ds` c
 - Show per-file status and progress, overall queue progress, errors, retry, and cancellation. Completed outputs are available while later files convert.
 - Provide individual Save to Files and Share actions. Use system handoff where supported; Folium can import files saved through Files.
 - Place Save All and Share All side by side in one row above Add CIA files. Keep these labels for any result count. Save All writes separate unexported `.3ds` files to a chosen folder; Share All passes them together to the system share sheet. Both exclude exported results.
-- Updated November 8: after each successful export, persist its receipt, delete only that file's app-owned working folder, and move its row into a subdued Saved section. Show Saved to Files or Shared, with Redo instead of save/share actions. Redo uses the original CIA bookmark to queue a fresh conversion and moves the row back to the active list.
-- Keep the conversion page after exports or Clear, even with no active files. Accumulate Saved history as more CIAs are added. Keep history through backgrounding and relaunches with unfinished or unsaved work; reset it on a fresh launch only when all remaining rows are exported or canceled. Never clear history just because the app enters the background.
-- Canceled/failed exports retain unsaved results for retry, and partial folder exports move each successfully saved file into Saved. Sharing counts as exported only when the system reports success.
+- Group queued, running, paused, interrupted, and storage-paused jobs under In Progress. Group ready results, saved/shared history, errors, and deleted jobs under Finished. The core queue model owns section membership and pause/resume/delete/clear transitions.
+- After each successful export, persist its receipt and delete only that file's app-owned working folder. Saved/shared and deleted rows look subdued and show Redo rather than save/share actions. Redo uses the original CIA bookmark for a fresh conversion and returns the row to In Progress.
+- Keep the conversion page after exports or Clear, even with no active files. Accumulate Finished history as more CIAs are added. Keep it through backgrounding and relaunches with unfinished or unsaved work; reset on a fresh idle launch. Never clear history just because the app enters the background.
+- Canceled/failed exports retain unsaved results for retry. Sharing counts as exported only when the system reports success.
 - Continue past file failures, including missing keys. Allow retry after fixing the cause.
-- Allow individual cancellation and Clear for the active queue. Keep Saved history when clearing. Confirm if Clear would remove completed, unexported results. Do not offer a separate Discard action.
-- Pause on low storage, preserve completed outputs, remove the incomplete output, and allow retry after space becomes available.
+- Put a labeled Pause All / Resume All control in the overview card beside progress. Pause All pauses running and queued jobs without deleting progress. Keep Clear in the toolbar. Per-file Pause retains progress; Resume continues that file. X deletes its working files and moves it to Finished with Redo, without stopping other jobs.
+- Clear removes only Finished entries, including unexported results, saved history, errors, and deleted rows. Confirm before removing unexported results. Preserve running, queued, and paused jobs, and protect a worker that is still closing its files.
+- Pause on low storage while keeping completed and usable partial outputs. Resume after space becomes available.
 
 ## Background work and recovery
 
 - Use iOS 26 continued processing for user-started conversions while the app is in the background, subject to system runtime limits.
-- Persist the queue and completed outputs across interruptions. Interrupted files restart from the beginning on retry.
+- Persist the queue and retain partial outputs across pauses and interruptions. On resume, rebuild integrity hashes and check saved output bytes against the CIA before writing the missing suffix. Reject damaged or mismatched partial files; never present them as finished outputs.
 - Test background behavior with a LiveContainer build containing its background-processing fix.
 
 ## Interface

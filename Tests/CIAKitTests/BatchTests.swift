@@ -2,6 +2,62 @@ import XCTest
 @testable import CIAKit
 
 final class BatchTests: XCTestCase {
+    func testStopPreservesProgressAndResumeKeepsItAcrossPersistence() throws {
+        try withDirectory { root in
+            var batch = completedBatch(count: 4)
+            batch.jobs[0].status = .running
+            batch.jobs[0].progress = 0.4
+            batch.jobs[1].status = .queued
+            batch.jobs[1].progress = 0
+            batch.jobs[3].status = .failed
+            batch.pauseAll()
+            XCTAssertEqual(batch.jobs.map(\.status), [.paused, .paused, .completed, .failed])
+            XCTAssertEqual(batch.inProgressJobs.count, 2)
+            XCTAssertEqual(batch.finishedJobs.count, 2)
+            let snapshot = root.appendingPathComponent("stopped.json")
+            try batch.save(to: snapshot)
+            var restored = try ConversionBatch.load(from: snapshot)
+            restored.recover { $0.status == .completed }
+            XCTAssertEqual(restored.jobs[0].progress, 0.4)
+            XCTAssertTrue(restored.resume(restored.jobs[0].id))
+            XCTAssertEqual(restored.jobs[0].status, .queued)
+            XCTAssertEqual(restored.jobs[0].progress, 0.4)
+            XCTAssertEqual(restored.jobs[1].status, .paused)
+            XCTAssertFalse(restored.resume(restored.jobs[2].id))
+        }
+    }
+
+    func testClearRemovesFinishedEntriesWithoutChangingRunningQueuedOrPausedJobs() {
+        var batch = completedBatch(count: 7)
+        batch.jobs[0].status = .running
+        batch.jobs[0].progress = 0.3
+        batch.jobs[1].status = .queued
+        batch.jobs[2].status = .paused
+        batch.jobs[4].status = .failed
+        batch.jobs[5].status = .cancelled
+        batch.markExported([batch.jobs[6].id], destination: .files)
+        XCTAssertEqual(batch.clearFinished().count, 4)
+        XCTAssertEqual(batch.jobs.map(\.status), [.running, .queued, .paused])
+        XCTAssertEqual(batch.jobs[0].progress, 0.3)
+    }
+
+    func testDeleteMovesProgressToFinishedAndRedoStartsFresh() {
+        var batch = completedBatch(count: 1)
+        let id = batch.jobs[0].id
+        batch.jobs[0].status = .paused
+        batch.jobs[0].progress = 0.6
+        XCTAssertTrue(batch.deleteProgress(id))
+        XCTAssertTrue(batch.inProgressJobs.isEmpty)
+        XCTAssertEqual(batch.finishedJobs.map(\.id), [id])
+        XCTAssertEqual(batch.jobs[0].status, .cancelled)
+        XCTAssertEqual(batch.jobs[0].progress, 0)
+        XCTAssertTrue(batch.clearFinished(excluding: [id]).isEmpty)
+        XCTAssertTrue(batch.requeue(id))
+        XCTAssertEqual(batch.inProgressJobs.map(\.id), [id])
+        XCTAssertTrue(batch.finishedJobs.isEmpty)
+        XCTAssertFalse(batch.resume(id))
+    }
+
     func testIndividualExportsMoveToHistoryWithoutClearingTheSession() {
         var batch = completedBatch(count: 2)
         let ids = batch.jobs.map(\.id)
@@ -24,7 +80,7 @@ final class BatchTests: XCTestCase {
     }
 
     func testUnfinishedOrUnsavedWorkPreservesHistoryOnRelaunch() {
-        for status in [JobStatus.queued, .running, .completed, .failed, .interrupted, .storagePaused] {
+        for status in [JobStatus.queued, .running, .paused, .completed, .interrupted, .storagePaused] {
             var batch = completedBatch(count: 2)
             batch.jobs[1].status = status
             batch.markExported([batch.jobs[0].id], destination: .files)
@@ -74,7 +130,7 @@ final class BatchTests: XCTestCase {
         XCTAssertTrue(batch.savedResults.isEmpty)
         XCTAssertEqual(batch.activeJobs.count, 1)
         XCTAssertEqual(batch.jobs.count, 1)
-        for status in [JobStatus.queued, .running, .failed, .interrupted, .storagePaused, .cancelled] {
+        for status in [JobStatus.queued, .running, .paused, .failed, .interrupted, .storagePaused, .cancelled] {
             batch.jobs[0].status = status
             batch.markExported([batch.jobs[0].id], destination: .files)
             XCTAssertFalse(batch.jobs[0].exported)
@@ -179,7 +235,7 @@ final class BatchTests: XCTestCase {
             var restored = try ConversionBatch.load(from: snapshot)
             restored.recover { $0.id == complete.id }
             XCTAssertEqual(restored.jobs.map(\.status), [.completed, .interrupted, .queued])
-            XCTAssertEqual(restored.jobs[1].progress, 0)
+            XCTAssertEqual(restored.jobs[1].progress, 0.5)
             XCTAssertTrue(restored.hasUnexportedResults)
             XCTAssertTrue(restored.hasQueuedWork)
             restored.recover { _ in false }
@@ -196,6 +252,22 @@ final class BatchTests: XCTestCase {
         XCTAssertEqual(batch.jobs[0].status, .completed)
         XCTAssertEqual(batch.jobs[0].progress, 1)
         XCTAssertTrue(batch.hasUnexportedResults)
+        var interrupted = ConversionJob(inputName: "Partial.cia", sourceBookmark: Data(), inputBytes: 100)
+        interrupted.status = .running
+        batch.jobs.append(interrupted)
+        batch.recover(partialSize: { $0.id == interrupted.id ? 0x4000 + 40 : 0 }) { $0.id == job.id }
+        XCTAssertEqual(batch.jobs[1].status, .interrupted)
+        XCTAssertEqual(batch.jobs[1].progress, 0.4)
+        XCTAssertEqual(batch.unexportedResults.map(\.id), [job.id])
+        for status in [JobStatus.queued, .running, .paused, .interrupted, .storagePaused] {
+            batch.jobs[1].status = status
+            batch.recover { _ in true }
+            XCTAssertEqual(batch.jobs[1].status, .completed)
+            XCTAssertEqual(batch.jobs[1].progress, 1)
+        }
+        batch.jobs[1].status = .cancelled
+        batch.recover { _ in true }
+        XCTAssertEqual(batch.jobs[1].status, .cancelled)
     }
 
     func testExportPreservesOriginalsAndNeverOverwrites() throws {

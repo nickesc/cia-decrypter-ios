@@ -6,7 +6,8 @@ public final class ConversionControl: @unchecked Sendable {
     private var reason: ConversionError?
     public init() {}
     public func cancel() { lock.withLock { reason = .cancelled } }
-    public func interrupt() { lock.withLock { reason = .interrupted } }
+    public func pause() { lock.withLock { if reason != .cancelled { reason = .paused } } }
+    public func interrupt() { lock.withLock { if reason == nil { reason = .interrupted } } }
     public func check() throws {
         if let reason = lock.withLock({ reason }) { throw reason }
     }
@@ -24,9 +25,24 @@ public struct ConversionResult: Sendable {
 }
 
 public enum CIAConverter {
-    public static func convert(input: URL, output: URL, keys: KeyMaterial, control: ConversionControl = .init(), progress: @Sendable (ConversionProgress) -> Void = { _ in }) throws -> ConversionResult {
-        try control.check()
+    public static func convert(input: URL, output: URL, keys: KeyMaterial, control: ConversionControl = .init(), resumable: Bool = false, progress: @Sendable (ConversionProgress) -> Void = { _ in }) throws -> ConversionResult {
         guard input.standardizedFileURL != output.standardizedFileURL else { throw ConversionError.invalid("Input and output must be different files.") }
+        let fm = FileManager.default
+        let partial = output.appendingPathExtension("partial")
+        guard input.standardizedFileURL != partial.standardizedFileURL else { throw ConversionError.invalid("Input and partial output must be different files.") }
+        guard !fm.fileExists(atPath: output.path), resumable || !fm.fileExists(atPath: partial.path) else { throw ConversionError.invalid("An output with this name already exists.") }
+        do {
+            return try process(input: input, output: output, keys: keys, control: control, resumable: resumable, progress: progress)
+        } catch {
+            let recoverable = error as? ConversionError == .paused || error as? ConversionError == .interrupted || isStorageError(error)
+            let size = (try? fm.attributesOfItem(atPath: partial.path)[.size] as? NSNumber)?.uint64Value ?? 0
+            if !resumable || !recoverable || size < 0x4000 { try? fm.removeItem(at: partial) }
+            throw error
+        }
+    }
+
+    private static func process(input: URL, output: URL, keys: KeyMaterial, control: ConversionControl, resumable: Bool, progress: @Sendable (ConversionProgress) -> Void) throws -> ConversionResult {
+        try control.check()
         let file = try BinaryFile(input)
         let archive = try CIAArchive(file: file, keys: keys)
         progress(.init(fraction: 0, phase: "Checking contents"))
@@ -40,15 +56,15 @@ public enum CIAConverter {
             plans.append((content, source, plan, end))
             end += aligned(plan.size, to: 0x200)
         }
-        try checkStorage(at: output.deletingLastPathComponent(), required: end)
         let fm = FileManager.default
         let partial = output.appendingPathExtension("partial")
-        guard !fm.fileExists(atPath: output.path), !fm.fileExists(atPath: partial.path) else { throw ConversionError.invalid("An output with this name already exists.") }
-        try Data().write(to: partial, options: .withoutOverwriting)
-        var finished = false
-        defer { if !finished { try? fm.removeItem(at: partial) } }
+        let saved = resumable && fm.fileExists(atPath: partial.path) ? try BinaryFile(partial) : nil
+        if saved == nil { try Data().write(to: partial, options: .withoutOverwriting) }
         let out = try FileHandle(forWritingTo: partial)
-        defer { try? out.close() }
+        defer {
+            if resumable { try? out.synchronize() }
+            try? out.close()
+        }
         let baseID = plans[0].2.partitionID
         var cci = Data(repeating: 0, count: 0x4000)
         cci.replaceSubrange(0..<0x100, with: Data(repeating: 0xff, count: 0x100))
@@ -70,8 +86,14 @@ public enum CIAConverter {
             cci.replaceSubrange((0x190 + content.index * 8)..<(0x198 + content.index * 8), with: try header.bytes(0x108, 8))
             if content.index == 0 { cci.replaceSubrange(0x1100..<0x1200, with: try header.bytes(0x100, 0x100)) }
         }
-        try out.write(contentsOf: cci)
+        if let saved {
+            guard saved.size >= 0x4000, saved.size <= end, try saved.read(0, cci.count) == cci else {
+                throw ConversionError.integrity("The saved conversion does not match this CIA. Redo the conversion.")
+            }
+        } else { try out.write(contentsOf: cci) }
+        try checkStorage(at: output.deletingLastPathComponent(), required: end - (saved?.size ?? 0x4000))
         let total = contents.reduce(UInt64(0)) { $0 + $1.size }
+        let savedBytes = (saved?.size ?? 0x4000) - 0x4000
         var completed: UInt64 = 0
         var lastStorageCheck: UInt64 = 0
         var lastProgress = Date.distantPast
@@ -95,13 +117,22 @@ public enum CIAConverter {
                     if offset == 0 { decrypted.replaceSubrange(0..<0x200, with: plan.outputHeader(index: content.index, baseID: baseID)) }
                     if offset < plan.size {
                         let outputCount = min(count, Int(plan.size - offset))
-                        try out.seek(toOffset: destination + offset)
-                        try out.write(contentsOf: decrypted.prefix(outputCount))
+                        let position = destination + offset
+                        let savedLength = saved?.size ?? 0
+                        let retained = Int(min(UInt64(outputCount), savedLength > position ? savedLength - position : 0))
+                        // Rebuild integrity hashes and verify retained bytes; only write the missing suffix.
+                        if let saved, retained > 0, try saved.read(position, retained) != decrypted.prefix(retained) {
+                            throw ConversionError.integrity("The saved conversion is damaged. Redo the conversion.")
+                        }
+                        if retained < outputCount {
+                            try out.seek(toOffset: position + UInt64(retained))
+                            try out.write(contentsOf: decrypted[retained..<outputCount])
+                        }
                     }
                     offset += UInt64(count)
                     completed += UInt64(count)
                     if Date().timeIntervalSince(lastProgress) >= 0.1 {
-                        progress(.init(fraction: Double(completed) / Double(total) * 0.99, phase: "Decrypting and verifying"))
+                        progress(.init(fraction: Double(max(completed, savedBytes)) / Double(total) * 0.99, phase: completed < savedBytes ? "Checking saved progress" : "Decrypting and verifying"))
                         lastProgress = Date()
                     }
                 }
@@ -118,7 +149,6 @@ public enum CIAConverter {
         }
         try control.check()
         try fm.moveItem(at: partial, to: output)
-        finished = true
         progress(.init(fraction: 1, phase: "Ready to export"))
         return ConversionResult(outputURL: output, titleID: archive.titleID, bytes: end)
     }

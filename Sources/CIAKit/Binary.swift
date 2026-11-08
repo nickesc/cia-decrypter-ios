@@ -7,6 +7,7 @@ public enum ConversionError: Error, LocalizedError, Equatable, Sendable {
     case integrity(String)
     case lowStorage
     case cancelled
+    case paused
     case interrupted
 
     public var errorDescription: String? {
@@ -17,7 +18,8 @@ public enum ConversionError: Error, LocalizedError, Equatable, Sendable {
         case .integrity(let detail): "\(detail) Check the input and imported keys, then retry."
         case .lowStorage: "Not enough free space. Free storage, then retry."
         case .cancelled: "Conversion canceled."
-        case .interrupted: "Conversion interrupted. Retry to start this file again."
+        case .paused: "Conversion paused. Resume to continue."
+        case .interrupted: "Conversion interrupted. Resume to continue."
         }
     }
 }

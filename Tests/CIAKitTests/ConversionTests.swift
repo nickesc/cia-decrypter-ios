@@ -2,6 +2,66 @@ import XCTest
 @testable import CIAKit
 
 final class ConversionTests: XCTestCase {
+    func testPauseRetainsOutputAndResumesWithFullIntegrityVerification() throws {
+        for encrypted in [false, true] {
+            let fixture = try Fixture(encrypted: encrypted, seeded: encrypted, romfsSize: 3 * 1024 * 1024)
+            try withDirectory { root in
+                let input = root.appendingPathComponent("input.cia")
+                let output = root.appendingPathComponent("output.3ds")
+                let partial = output.appendingPathExtension("partial")
+                try fixture.cia.write(to: input)
+                let control = ConversionControl()
+                XCTAssertThrowsError(try CIAConverter.convert(input: input, output: output, keys: fixture.keys, control: control, resumable: true) { progress in
+                    if progress.fraction > 0 { control.pause() }
+                }) { XCTAssertEqual($0 as? ConversionError, .paused) }
+                XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+                let retained = try Data(contentsOf: partial)
+                XCTAssertGreaterThan(retained.count, 0x4000)
+                XCTAssertLessThan(retained.count, 0x4000 + fixture.plain.count)
+                _ = try CIAConverter.convert(input: input, output: output, keys: fixture.keys, resumable: true)
+                let result = try Data(contentsOf: output)
+                XCTAssertEqual(result.prefix(retained.count), retained)
+                XCTAssertEqual(result.count, 0x4000 + fixture.plain.count)
+                XCTAssertEqual(try result.bytes(0x4200, fixture.plain.count - 0x200), try fixture.plain.bytes(0x200, fixture.plain.count - 0x200))
+                XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
+            }
+        }
+    }
+
+    func testDamagedPausedOutputIsRejectedAndDeleteWinsOverPause() throws {
+        let fixture = try Fixture(encrypted: true, seeded: true)
+        try withDirectory { root in
+            let input = root.appendingPathComponent("input.cia")
+            let output = root.appendingPathComponent("output.3ds")
+            let partial = output.appendingPathExtension("partial")
+            try fixture.cia.write(to: input)
+            let control = ConversionControl()
+            XCTAssertThrowsError(try CIAConverter.convert(input: input, output: output, keys: fixture.keys, control: control, resumable: true) { progress in
+                if progress.fraction > 0 { control.pause() }
+            })
+            var damaged = try Data(contentsOf: partial)
+            damaged[0x4200] ^= 1
+            try damaged.write(to: partial)
+            XCTAssertThrowsError(try CIAConverter.convert(input: input, output: output, keys: fixture.keys, resumable: true)) {
+                guard case ConversionError.integrity = $0 else { return XCTFail("Expected damaged checkpoint rejection") }
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
+            let interrupted = ConversionControl()
+            XCTAssertThrowsError(try CIAConverter.convert(input: input, output: output, keys: fixture.keys, control: interrupted, resumable: true) { progress in
+                if progress.fraction > 0 { interrupted.interrupt() }
+            }) { XCTAssertEqual($0 as? ConversionError, .interrupted) }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
+            let deletion = ConversionControl()
+            deletion.pause()
+            deletion.cancel()
+            deletion.interrupt()
+            deletion.pause()
+            XCTAssertThrowsError(try deletion.check()) { XCTAssertEqual($0 as? ConversionError, .cancelled) }
+            XCTAssertThrowsError(try CIAConverter.convert(input: input, output: output, keys: fixture.keys, control: deletion, resumable: true))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
+        }
+    }
+
     func testNISTAESVectorsAndRandomAccess() throws {
         let key = Data(hex: "2b7e151628aed2a6abf7158809cf4f3c")!
         let plaintext = Data(hex: "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e51")!
@@ -151,7 +211,7 @@ struct Fixture {
     let plain: Data
     let keys: KeyMaterial
 
-    init(encrypted: Bool, seeded: Bool) throws {
+    init(encrypted: Bool, seeded: Bool, romfsSize: Int = 0x800) throws {
         var keys = KeyMaterial()
         keys.keys["slot0x2ckeyx"] = Data(repeating: 0x12, count: 16)
         keys.keys["slot0x18keyx"] = Data(repeating: 0x34, count: 16)
@@ -159,7 +219,7 @@ struct Fixture {
         keys.keys["common0"] = Data(repeating: 0x78, count: 16)
         let seed = Data(repeating: 0x9a, count: 16)
         keys.seeds[Self.title] = seed
-        var ncch = Data(repeating: 0, count: 0x1800)
+        var ncch = Data(repeating: 0, count: 0x1000 + romfsSize)
         ncch.replaceSubrange(0..<16, with: Data(repeating: 0xbc, count: 16))
         ncch.replaceSubrange(0x100..<0x104, with: Data("NCCH".utf8))
         ncch.put(UInt64(ncch.count / 0x200), at: 0x104, width: 4)
@@ -174,7 +234,7 @@ struct Fixture {
         ncch.put(3, at: 0x1a4, width: 4)
         ncch.put(1, at: 0x1a8, width: 4)
         ncch.put(8, at: 0x1b0, width: 4)
-        ncch.put(4, at: 0x1b4, width: 4)
+        ncch.put(UInt64(romfsSize / 0x200), at: 0x1b4, width: 4)
         ncch.put(1, at: 0x1b8, width: 4)
         for index in 0x200..<0xa00 { ncch[index] = UInt8(truncatingIfNeeded: index * 7) }
         var exefs = Data(repeating: 0, count: 0x600)
@@ -188,7 +248,7 @@ struct Fixture {
         exefs.replaceSubrange(0x1e0..<0x200, with: Crypto.sha256(try exefs.bytes(0x200, 257)))
         exefs.replaceSubrange(0x1c0..<0x1e0, with: Crypto.sha256(try exefs.bytes(0x400, 100)))
         ncch.replaceSubrange(0xa00..<0x1000, with: exefs)
-        for index in 0x1000..<0x1800 { ncch[index] = UInt8(truncatingIfNeeded: index * 17) }
+        for index in 0x1000..<ncch.count { ncch[index] = UInt8(truncatingIfNeeded: index * 17) }
         ncch.replaceSubrange(0x160..<0x180, with: Crypto.sha256(try ncch.bytes(0x200, 0x400)))
         ncch.replaceSubrange(0x1c0..<0x1e0, with: Crypto.sha256(try exefs.bytes(0, 0x200)))
         ncch.replaceSubrange(0x1e0..<0x200, with: Crypto.sha256(try ncch.bytes(0x1000, 0x200)))
@@ -208,7 +268,7 @@ struct Fixture {
             var encExe = try Crypto.ctr(exefs, key: main, counter: counter(2))
             encExe.replaceSubrange(0x200..<0x301, with: try Crypto.ctr(exefs.bytes(0x200, 257), key: extra, counter: counter(2), offset: 0x200))
             ncch.replaceSubrange(0xa00..<0x1000, with: encExe)
-            ncch.replaceSubrange(0x1000..<0x1800, with: try Crypto.ctr(ncch.bytes(0x1000, 0x800), key: extra, counter: counter(3)))
+            ncch.replaceSubrange(0x1000..<ncch.count, with: try Crypto.ctr(ncch.bytes(0x1000, romfsSize), key: extra, counter: counter(3)))
         }
         let contentHash = Crypto.sha256(ncch)
         let titleKey = Data(repeating: 0xde, count: 16)
