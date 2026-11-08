@@ -18,6 +18,10 @@ public enum JobStatus: String, Codable, Sendable {
     public var canRetry: Bool { self == .failed || self == .interrupted || self == .storagePaused || self == .cancelled }
 }
 
+public enum ExportDestination: String, Codable, Sendable {
+    case files, share
+}
+
 public struct ConversionJob: Identifiable, Codable, Sendable {
     public let id: UUID
     public let inputName: String
@@ -28,7 +32,17 @@ public struct ConversionJob: Identifiable, Codable, Sendable {
     public var progress: Double = 0
     public var message: String?
     public var exported = false
+    public var exportDestination: ExportDestination?
     public var outputBytes: UInt64?
+
+    public var exportLabel: String? {
+        guard status == .completed, exported else { return nil }
+        switch exportDestination {
+        case .files: return "Saved to Files"
+        case .share: return "Shared"
+        case nil: return "Exported"
+        }
+    }
 
     public init(id: UUID = UUID(), inputName: String, sourceBookmark: Data, inputBytes: Int64) {
         self.id = id
@@ -44,8 +58,26 @@ public struct ConversionBatch: Codable, Sendable {
     public var jobs: [ConversionJob] = []
     public init() {}
     public var completed: [ConversionJob] { jobs.filter { $0.status == .completed } }
-    public var hasUnexportedResults: Bool { completed.contains { !$0.exported } }
+    public var unexportedResults: [ConversionJob] { completed.filter { !$0.exported } }
+    public var hasUnexportedResults: Bool { !unexportedResults.isEmpty }
     public var hasQueuedWork: Bool { jobs.contains { $0.status == .queued } }
+    public var isFullyExported: Bool {
+        !completed.isEmpty && jobs.allSatisfy { $0.status == .cancelled || ($0.status == .completed && $0.exported) }
+    }
+
+    public mutating func markExported(_ ids: Set<UUID>, destination: ExportDestination) {
+        for index in jobs.indices where ids.contains(jobs[index].id) && jobs[index].status == .completed {
+            jobs[index].exported = true
+            if jobs[index].exportDestination != .files { jobs[index].exportDestination = destination }
+        }
+    }
+
+    public mutating func clearIfFullyExported() -> [ConversionJob] {
+        guard isFullyExported else { return [] }
+        let finished = jobs
+        jobs.removeAll()
+        return finished
+    }
     public var fraction: Double {
         guard !jobs.isEmpty else { return 0 }
         let total = jobs.reduce(0.0) { $0 + Double(max($1.inputBytes, 1)) }
@@ -63,7 +95,7 @@ public struct ConversionBatch: Codable, Sendable {
                 jobs[index].status = finished ? .completed : .interrupted
                 jobs[index].progress = finished ? 1 : 0
                 jobs[index].message = finished ? nil : ConversionError.interrupted.localizedDescription
-            } else if jobs[index].status == .completed && !outputExists(jobs[index]) {
+            } else if jobs[index].status == .completed && !jobs[index].exported && !outputExists(jobs[index]) {
                 jobs[index].status = .failed
                 jobs[index].progress = 0
                 jobs[index].message = "The saved output is missing. Retry to convert this file again."
@@ -88,7 +120,7 @@ public struct ExportFile: Sendable {
 }
 
 public enum BatchExporter {
-    public static func export(_ files: [ExportFile], to folder: URL, control: ConversionControl = .init(), progress: @Sendable (Double) -> Void = { _ in }) throws {
+    public static func export(_ files: [ExportFile], to folder: URL, control: ConversionControl = .init(), onFileExported: (ExportFile) -> Void = { _ in }, progress: @Sendable (Double) -> Void = { _ in }) throws {
         guard !files.isEmpty else { throw ConversionError.invalid("There are no completed files to export.") }
         let fm = FileManager.default
         for (index, file) in files.enumerated() {
@@ -128,6 +160,7 @@ public enum BatchExporter {
             try control.check()
             try fm.moveItem(at: partial, to: destination)
             done = true
+            onFileExported(file)
         }
         progress(1)
     }

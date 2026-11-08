@@ -54,7 +54,7 @@ struct ContentView: View {
                 }
                 if !store.batch.jobs.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel batch", role: .destructive) {
+                        Button("Clear", role: .destructive) {
                             if store.needsCancelConfirmation { confirmingCancel = true }
                             else { store.cancelBatch() }
                         }
@@ -74,12 +74,12 @@ struct ContentView: View {
                 switch request.kind {
                 case .save(let job):
                     DocumentPicker(mode: .save([store.outputURL(job)])) { urls in
-                        if !urls.isEmpty { store.markExported([job.id]) }
+                        if !urls.isEmpty { store.markExported([job.id], destination: .files) }
                         export = nil
                     } onCancel: { export = nil }
                 case .share(let job):
                     SharePicker(urls: [store.outputURL(job)]) { completed in
-                        if completed { store.markExported([job.id]) }
+                        if completed { store.markExported([job.id], destination: .share) }
                         export = nil
                     }
                     .presentationDetents([.medium, .large])
@@ -90,9 +90,9 @@ struct ContentView: View {
                     } onCancel: { export = nil }
                 }
             }
-            .confirmationDialog("Cancel this batch?", isPresented: $confirmingCancel, titleVisibility: .visible) {
-                Button("Cancel batch", role: .destructive) { store.cancelBatch() }
-                Button("Keep batch", role: .cancel) {}
+            .confirmationDialog("Clear conversions?", isPresented: $confirmingCancel, titleVisibility: .visible) {
+                Button("Clear", role: .destructive) { store.cancelBatch() }
+                Button("Keep conversions", role: .cancel) {}
             } message: {
                 Text("This stops conversions and removes completed results that you haven’t exported. Original CIA files stay untouched.")
             }
@@ -135,7 +135,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
-            Label("Choose one file or a whole batch", systemImage: "square.stack")
+            Label("Choose one or more files", systemImage: "square.stack")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -159,13 +159,13 @@ struct ContentView: View {
     private var overview: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(store.isRunning ? "Converting" : store.isPaused ? "Batch paused" : store.batch.hasQueuedWork ? "Ready to resume" : "Batch finished")
+                Text(store.isRunning ? "Converting" : store.isPaused ? "Conversion paused" : store.batch.hasQueuedWork ? "Ready to resume" : "Conversion finished")
                     .font(.headline)
                 Spacer(minLength: 0)
                 if store.isRunning { ProgressView().controlSize(.small).accessibilityLabel("Converting") }
             }
             ProgressView(value: store.batch.fraction)
-                .accessibilityLabel("Batch progress")
+                .accessibilityLabel("Conversion progress")
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(store.completed.count)").font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
                 Text("of \(store.batch.jobs.count) ready").foregroundStyle(.secondary)
@@ -175,7 +175,7 @@ struct ContentView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if !store.isRunning && (store.isPaused || store.batch.hasQueuedWork || store.batch.jobs.contains(where: { $0.status == .interrupted })) {
-                Button("Resume batch", systemImage: "play.fill") { store.resume() }
+                Button("Resume", systemImage: "play.fill") { store.resume() }
                     .buttonStyle(.bordered)
                     .disabled(store.isExporting)
             }
@@ -219,16 +219,12 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
                     if !store.batch.jobs.isEmpty {
                         Button { export = ExportRequest(kind: .folder) } label: {
-                            Label("Export All", systemImage: "square.and.arrow.up")
+                            Label(exportTitle, systemImage: "square.and.arrow.up")
                                 .frame(maxWidth: .infinity).padding(.vertical, 6)
                         }
                         .buttonStyle(.bordered)
                         .disabled(!store.canExportAll)
                     }
-                }
-                if !store.batch.jobs.isEmpty && !store.canExportAll {
-                    Text(store.isRunning ? "Export each ready file now, or the whole batch when it finishes." : "Export All becomes available when conversions finish or the queue pauses.")
-                        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
             }
         }
@@ -237,6 +233,11 @@ struct ContentView: View {
         .frame(maxWidth: 1000)
         .frame(maxWidth: .infinity)
         .background(.bar)
+    }
+
+    private var exportTitle: String {
+        if store.completed.contains(where: \.exported) { return "Export Unsaved" }
+        return store.batch.unexportedResults.count > 1 ? "Export All" : "Export"
     }
 
     private var actionLayout: AnyLayout {
@@ -265,7 +266,7 @@ private struct JobRow: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(job.inputName).font(.subheadline.weight(.semibold)).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     HStack(spacing: 7) {
-                        Text(job.status.label).foregroundStyle(statusColor)
+                        Text(job.exportLabel ?? job.status.label).foregroundStyle(statusColor)
                         Text("·").foregroundStyle(.tertiary)
                         Text(ByteCountFormatter.string(fromByteCount: job.inputBytes, countStyle: .file)).foregroundStyle(.secondary)
                     }
@@ -293,7 +294,7 @@ private struct JobRow: View {
             }
             if job.status == .completed {
                 resultLayout {
-                    Button("Save to Files", systemImage: "folder", action: save)
+                    Button(job.exportDestination == .files ? "Save again" : "Save to Files", systemImage: "folder", action: save)
                     Button("Share", systemImage: "square.and.arrow.up", action: share)
                 }
                 .buttonStyle(.bordered)
@@ -306,7 +307,16 @@ private struct JobRow: View {
             }
         }
         .padding(18)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .background {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .overlay {
+                    if isExported { RoundedRectangle(cornerRadius: 20).fill(Color.teal.opacity(0.08)) }
+                }
+        }
+        .overlay {
+            if isExported { RoundedRectangle(cornerRadius: 20).strokeBorder(Color.teal.opacity(0.4), lineWidth: 1) }
+        }
     }
 
     private var resultLayout: AnyLayout {
@@ -314,7 +324,8 @@ private struct JobRow: View {
     }
 
     private var symbol: String {
-        switch job.status {
+        if isExported { return "checkmark.seal.fill" }
+        return switch job.status {
         case .queued: "clock"
         case .running: "arrow.trianglehead.2.clockwise.rotate.90"
         case .completed: "checkmark.circle.fill"
@@ -325,11 +336,14 @@ private struct JobRow: View {
     }
 
     private var statusColor: Color {
-        switch job.status {
+        if isExported { return .teal }
+        return switch job.status {
         case .completed: .green
         case .running: .conversionAccent
         case .failed, .storagePaused: .orange
         default: .secondary
         }
     }
+
+    private var isExported: Bool { job.status == .completed && job.exported }
 }

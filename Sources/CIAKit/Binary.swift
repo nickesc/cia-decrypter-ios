@@ -15,7 +15,7 @@ public enum ConversionError: Error, LocalizedError, Equatable, Sendable {
         case .unsupported(let detail): "\(detail) V1 converts base-game application CIAs."
         case .missingKey(let detail): "Missing \(detail). Import the required key file in Keys, then retry."
         case .integrity(let detail): "\(detail) Check the input and imported keys, then retry."
-        case .lowStorage: "Not enough free space. Free storage or export and close this batch, then retry."
+        case .lowStorage: "Not enough free space. Free storage, then retry."
         case .cancelled: "Conversion canceled."
         case .interrupted: "Conversion interrupted. Retry to start this file again."
         }

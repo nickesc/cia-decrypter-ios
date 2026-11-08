@@ -37,7 +37,7 @@ struct SharePicker: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
         let controller = UIActivityViewController(activityItems: urls, applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, completed, _, _ in completion(completed) }
+        controller.completionWithItemsHandler = { _, completed, _, error in completion(completed && error == nil) }
         return controller
     }
 
