@@ -1,0 +1,73 @@
+name: Release
+
+"on":
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+
+  release:
+    name: Build and publish IPA
+    needs: test
+    runs-on: macos-26
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build unsigned device IPA
+        run: bash Scripts/build-ipa.sh
+      - name: Validate tag and prepare AltStore source
+        run: >-
+          python3 Scripts/make-source.py build/CIADecrypter.ipa
+          --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+      - name: Keep release artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: CIADecrypter-${{ env.RELEASE_TAG }}
+          path: |
+            build/CIADecrypter.ipa
+            build/distribution/source.json
+            build/distribution/icon.png
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > build/release-is-draft.txt; then
+            if ! grep -qx true build/release-is-draft.txt; then
+              echo 'This release is already published. Bump the version and build for a new release.' >&2
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png --clobber
+            gh release edit "$RELEASE_TAG" --draft=false --title "CIA Decrypter for iOS $RELEASE_TAG" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$RELEASE_TAG" build/CIADecrypter.ipa build/distribution/source.json build/distribution/icon.png --verify-tag --title "CIA Decrypter for iOS $RELEASE_TAG" --notes-file RELEASE_NOTES.md
+          fi

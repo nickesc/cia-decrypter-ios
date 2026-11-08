@@ -70,7 +70,15 @@ python3 Scripts/check-memory.py /path/to/large-input.cia \
 
 Physical-device checks still required: Folium and Manic playback; on-device key import/Keychain behavior; Files/provider export and recovery; background work while locked; and direct AltStore versus LiveContainer installation. A build or desktop conversion does not establish those results.
 
-## Prepare the AltStore source
+## Test and release workflows
+
+GitHub Actions runs the `Test` workflow on pushes to `main`, pull requests, and manual dispatch. It runs the Swift core tests, Python release-metadata tests, packaging-script syntax check, and an unsigned iOS Simulator build with Xcode 26.3.
+
+The `Release` workflow runs on version tags such as `v0.1.0`, or manually for an existing tag. It first calls the same test workflow, then installs XcodeGen, builds the unsigned device IPA, checks that the tag matches the packaged version, and publishes a normal GitHub release with `CIADecrypter.ipa`, `source.json`, and `icon.png`. Releases remain accessible only to repository members while the repository is private. No signing certificates or game keys are needed in CI.
+
+To release a new version, update version/build numbers in `project.yml`, regenerate the Xcode project, commit and push, then create and push the matching version tag. The workflow refuses to replace an already-published release. Failed runs can be retried; an existing draft for the tag is updated and published after checks pass.
+
+## AltStore source
 
 After building the IPA:
 
@@ -78,11 +86,11 @@ After building the IPA:
 python3 Scripts/make-source.py build/CIADecrypter.ipa --output docs/source.json
 ```
 
-This reads the real bundle version, build number, minimum OS, and IPA byte size. It prepares the source and icon without publishing anything.
+This reads the real bundle version, build number, minimum OS, and IPA byte size. It prepares a local source snapshot and icon without publishing anything. CI generates fresh metadata from every release IPA and attaches it to the release.
 
-When ready, make the repository public, upload the IPA as a GitHub release asset matching the generated version URL, and enable GitHub Pages from `main` → `/docs`. The planned source address is `https://nickesc.github.io/cia-decrypter-ios/source.json`; it is not a working public install source while the repository and assets remain private.
+When ready, make the repository public. The automatically updated source address is `https://github.com/nickesc/cia-decrypter-ios/releases/latest/download/source.json`. Each source points to the matching versioned IPA and icon. This URL does not provide unauthenticated installation while the repository is private.
 
-Before each release, update version/build numbers in `project.yml`, regenerate, rebuild, and regenerate source metadata. Recheck permissions if entitlements or privacy usage descriptions change. Do not publish test keys or game outputs.
+Recheck source permissions if entitlements or privacy usage descriptions change. Test keys and game outputs stay outside the build and release artifacts.
 
 ## Code
 

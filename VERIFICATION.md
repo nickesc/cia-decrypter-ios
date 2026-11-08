@@ -1,6 +1,7 @@
 # Verification — November 7, 2026
 
 - `swift test`: 13 tests passed. Synthetic fixtures cover decrypted input, CIA + NCCH encryption, seeded/mixed-key ExeFS, corrupted data, missing keys/seeds, cancellation before and during work, unsupported titles, low-storage preflight, recovery, and safe export.
+- Python release-metadata tests: three passed, covering packaged version/size/asset URLs, rejection of mismatched tags, and rejection of bundled key/game files.
 - iOS 26 device Release build: passed with signing disabled for sideload packaging.
 - iOS Simulator build: passed without launching the app.
 - SteamWorld Dig: converted the supplied 44.3 MB CIA, validating both contents and decrypted-section hashes. A second run with Boot9-derived components produced an identical output.
@@ -9,6 +10,6 @@
 - IPA packaging and metadata checked against the actual app: bundle identifier `com.nickesc.ciadecrypter`, iOS 26 minimum, iPhone/iPad device families, matching version/build/size, continued-processing identifiers, launch configuration, and bundled acknowledgments.
 - Local imported AES values were checked against staged source files; none were present. Key files, firmware archives, game inputs, and converted outputs are ignored by Git and excluded from the app target.
 
-No physical-device or UI runtime checks have been performed. Still verify actual playback in Folium and Manic, device Keychain imports, Files providers, iOS background execution while locked, interruption/retry, and AltStore/LiveContainer installation. The private draft is for those checks. macOS memory measurements do not establish device-specific memory use.
+No physical-device or UI runtime checks have been performed. Still verify actual playback in Folium and Manic, device Keychain imports, Files providers, iOS background execution while locked, interruption/retry, and AltStore/LiveContainer installation. The initial private release is for those checks. macOS memory measurements do not establish device-specific memory use.
 
 The memory probe is repeatable with `Scripts/check-memory.py`; it uses an external local sample and deletes only its own temporary output. See README.md for commands. Game data and imported keys are not part of the test suite or release.

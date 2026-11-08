@@ -10,6 +10,7 @@ import zipfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("ipa", type=Path)
 parser.add_argument("--repository", default="nickesc/cia-decrypter-ios")
+parser.add_argument("--tag", help="Require the release tag to match the IPA version")
 parser.add_argument("--output", type=Path, default=Path("build/distribution/source.json"))
 args = parser.parse_args()
 
@@ -29,8 +30,9 @@ with zipfile.ZipFile(args.ipa) as archive:
     privacy = {name: value for name, value in info.items() if name.startswith("NS") and name.endswith("UsageDescription")}
 
 version = info["CFBundleShortVersionString"]
-owner, repository = args.repository.split("/", 1)
-base = f"https://{owner}.github.io/{repository}"
+if args.tag and args.tag != f"v{version}":
+    raise SystemExit("Release tag does not match the IPA version.")
+base = f"https://github.com/{args.repository}/releases/download/v{version}"
 source = {
     "name": "CIA Decrypter for iOS",
     "subtitle": "On-device CIA conversion",
