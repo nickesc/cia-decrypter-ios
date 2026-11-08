@@ -300,7 +300,7 @@ private struct JobRow: View {
                     .background(statusColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(job.inputName).font(.subheadline.weight(.semibold)).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    Text(displayName).font(.subheadline.weight(.semibold)).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .foregroundStyle(isRetired ? .secondary : .primary)
                     HStack(spacing: 7) {
                         Text(job.exportLabel ?? job.status.label).foregroundStyle(statusColor)
@@ -322,7 +322,7 @@ private struct JobRow: View {
                         .disabled(busy)
                 }
                 if !job.isSaved && job.status != .cancelled {
-                    Button("Delete progress for \(job.inputName)", systemImage: "xmark", action: delete)
+                    Button("Delete progress for \(displayName)", systemImage: "xmark", action: delete)
                         .labelStyle(.iconOnly)
                         .fontWeight(.bold)
                         .frame(minWidth: 44, minHeight: 44)
@@ -355,7 +355,7 @@ private struct JobRow: View {
             } else if job.isSaved || job.status.canRetry {
                 Button("Redo", systemImage: "arrow.clockwise", action: retry)
                     .buttonStyle(.glass)
-                    .accessibilityLabel("Redo \(job.inputName)")
+                    .accessibilityLabel("Redo \(displayName)")
                     .disabled(busy)
             }
         }
@@ -388,6 +388,8 @@ private struct JobRow: View {
         default: .secondary
         }
     }
+
+    private var displayName: String { job.status == .completed ? job.outputName : job.inputName }
 
     private var isRetired: Bool { job.isSaved || job.status == .cancelled }
 }
