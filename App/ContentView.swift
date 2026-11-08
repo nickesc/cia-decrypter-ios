@@ -311,7 +311,7 @@ private struct JobRow: View {
                 if !job.isSaved && job.status != .cancelled {
                     Button("Delete progress for \(job.inputName)", systemImage: "xmark", action: delete)
                         .labelStyle(.iconOnly)
-                        .fontWeight(.semibold)
+                        .fontWeight(.bold)
                         .frame(minWidth: 44, minHeight: 44)
                         .disabled(busy)
                 }
